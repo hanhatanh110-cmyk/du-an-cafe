@@ -1,0 +1,396 @@
+{% extends "base.html" %}
+
+{% block page_title %}Quản lý Mã giảm giá (Vouchers){% endblock %}
+{% block page_subtitle %}Thiết lập chương trình khuyến mãi, chiết khấu phần trăm & mã giảm cố định{% endblock %}
+
+{% block topbar_action %}
+<button class="btn btn-primary btn-sm" onclick="openAddVoucherModal()">
+    <i class="fas fa-plus"></i> Tạo mã giảm giá mới
+</button>
+{% endblock %}
+
+{% block content %}
+<!-- Voucher Tester / Validator Quick Tool -->
+<div class="card" style="margin-bottom: 24px; padding: 18px 24px; background: linear-gradient(135deg, rgba(200, 169, 126, 0.08) 0%, var(--bg-card) 100%);">
+    <div style="display: flex; gap: 16px; align-items: center; justify-content: space-between; flex-wrap: wrap;">
+        <div>
+            <h4 style="font-size: 14px; font-weight: 700; color: var(--primary-gold); margin-bottom: 4px;">
+                <i class="fas fa-ticket"></i> Công cụ kiểm tra tính hợp lệ của Voucher
+            </h4>
+            <p style="font-size: 12px; margin: 0;">Nhập mã voucher và giá trị đơn hàng để kiểm tra số tiền được giảm</p>
+        </div>
+        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+            <input type="text" id="test-code-input" class="form-control" placeholder="Mã voucher (VD: WELCOME10)" style="width: 180px; text-transform: uppercase;">
+            <input type="number" id="test-amount-input" class="form-control" placeholder="Số tiền đơn (VND)" style="width: 170px;" value="120000" step="10000">
+            <button class="btn btn-primary btn-sm" onclick="testValidateVoucher()">Kiểm tra ngay</button>
+        </div>
+    </div>
+</div>
+
+<!-- Vouchers Grid / Table -->
+<div class="card">
+    <div class="card-header">
+        <div class="card-title">
+            <i class="fas fa-ticket-simple"></i> Danh sách mã khuyến mãi (<span id="vouchers-count">0</span> mã)
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Mã Voucher</th>
+                    <th>Loại giảm giá</th>
+                    <th>Giá trị ưu đãi</th>
+                    <th>Đơn tối thiểu</th>
+                    <th>Lượt đã dùng</th>
+                    <th>Thời hạn hiệu lực</th>
+                    <th>Trạng thái</th>
+                    <th style="text-align: right;">Thao tác</th>
+                </tr>
+            </thead>
+            <tbody id="vouchers-tbody">
+                <tr>
+                    <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 30px;">
+                        <i class="fas fa-spinner fa-spin fa-2x"></i>
+                        <p style="margin-top: 10px;">Đang tải danh sách voucher...</p>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal: Thêm Voucher (Add Voucher Modal) -->
+<div id="add-voucher-modal" class="modal-backdrop">
+    <div class="modal-box">
+        <div class="modal-header">
+            <h3 style="color: var(--primary-gold);"><i class="fas fa-ticket"></i> Tạo mã giảm giá mới</h3>
+            <button class="modal-close-btn" onclick="closeModal('add-voucher-modal')">&times;</button>
+        </div>
+        <form id="add-voucher-form" onsubmit="submitAddVoucher(event)">
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Mã Code áp dụng *</label>
+                    <input type="text" id="add-v-code" class="form-control" placeholder="Ví dụ: TRIAN20, CHAOHONG..." style="text-transform: uppercase;" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Loại giảm giá *</label>
+                    <select id="add-v-type" class="form-select" onchange="onVoucherTypeChange('add')" required>
+                        <option value="percent">Giảm theo phần trăm (%)</option>
+                        <option value="fixed">Giảm số tiền cố định (VND)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" id="add-v-val-label">Mức giảm (%) *</label>
+                    <input type="number" id="add-v-value" class="form-control" placeholder="Ví dụ: 10 (tức giảm 10%)" min="1" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Giá trị đơn hàng tối thiểu (VND)</label>
+                    <input type="number" id="add-v-minorder" class="form-control" placeholder="Ví dụ: 50000" min="0" step="10000" value="0">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Giới hạn số lượt dùng tối đa</label>
+                    <input type="number" id="add-v-maxuses" class="form-control" value="100" min="1">
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+                    <div class="form-group">
+                        <label class="form-label">Có hiệu lực từ ngày</label>
+                        <input type="date" id="add-v-from" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Hết hạn vào ngày</label>
+                        <input type="date" id="add-v-until" class="form-control">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="closeModal('add-voucher-modal')">Hủy</button>
+                <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-save"></i> Lưu mã</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal: Sửa Voucher (Edit Voucher Modal) -->
+<div id="edit-voucher-modal" class="modal-backdrop">
+    <div class="modal-box">
+        <div class="modal-header">
+            <h3 style="color: var(--primary-gold);"><i class="fas fa-pen-to-square"></i> Cập nhật mã giảm giá</h3>
+            <button class="modal-close-btn" onclick="closeModal('edit-voucher-modal')">&times;</button>
+        </div>
+        <form id="edit-voucher-form" onsubmit="submitEditVoucher(event)">
+            <div class="modal-body">
+                <input type="hidden" id="edit-v-id">
+                <div class="form-group">
+                    <label class="form-label">Mã Code *</label>
+                    <input type="text" id="edit-v-code" class="form-control" style="text-transform: uppercase;" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Loại giảm giá *</label>
+                    <select id="edit-v-type" class="form-select" onchange="onVoucherTypeChange('edit')" required>
+                        <option value="percent">Giảm theo phần trăm (%)</option>
+                        <option value="fixed">Giảm số tiền cố định (VND)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" id="edit-v-val-label">Mức giảm *</label>
+                    <input type="number" id="edit-v-value" class="form-control" min="1" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Đơn tối thiểu (VND)</label>
+                    <input type="number" id="edit-v-minorder" class="form-control" min="0" step="10000">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Lượt dùng tối đa</label>
+                    <input type="number" id="edit-v-maxuses" class="form-control" min="1">
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+                    <div class="form-group">
+                        <label class="form-label">Hiệu lực từ</label>
+                        <input type="date" id="edit-v-from" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Hết hạn vào</label>
+                        <input type="date" id="edit-v-until" class="form-control">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-primary); font-size: 13px;">
+                        <input type="checkbox" id="edit-v-active" style="width: 16px; height: 16px; accent-color: var(--primary-gold);">
+                        Mã đang hoạt động (Cho phép khách áp dụng)
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="closeModal('edit-voucher-modal')">Hủy</button>
+                <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-check"></i> Cập nhật</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let allVouchersList = [];
+
+// Initialize
+async function loadVouchers() {
+    try {
+        allVouchersList = await apiCall('/api/vouchers');
+        renderVouchersTable(allVouchersList);
+    } catch (e) {
+        console.error('Failed to load vouchers:', e);
+    }
+}
+
+// Render Vouchers Table
+function renderVouchersTable(vouchers) {
+    const tbody = document.getElementById('vouchers-tbody');
+    document.getElementById('vouchers-count').textContent = vouchers.length;
+
+    if (vouchers.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 30px;">Chưa có mã giảm giá nào.</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = vouchers.map(v => {
+        let discountDisplay = '';
+        if (v.type === 'percent') {
+            discountDisplay = `<span class="badge badge-gold" style="font-size: 13px; font-weight: 700;">Giảm ${v.value}%</span>`;
+        } else {
+            discountDisplay = `<strong style="color: var(--primary-gold); font-size: 14px;">${formatVND(v.value)}</strong>`;
+        }
+
+        const dateRange = (v.valid_from && v.valid_until) 
+            ? `${v.valid_from} &rarr; ${v.valid_until}` 
+            : 'Vô thời hạn';
+
+        const usageRatio = `${v.used_count} / ${v.max_uses}`;
+
+        return `
+            <tr style="${!v.active ? 'opacity: 0.55;' : ''}">
+                <td>
+                    <span style="font-family: monospace; font-weight: 700; font-size: 14px; background: rgba(200, 169, 126, 0.12); color: var(--primary-gold); padding: 4px 8px; border-radius: var(--radius-sm); border: 1px dashed rgba(200, 169, 126, 0.3);">
+                        ${v.code}
+                    </span>
+                </td>
+                <td>${v.type === 'percent' ? 'Phần trăm (%)' : 'Số tiền cố định'}</td>
+                <td>${discountDisplay}</td>
+                <td>${v.min_order > 0 ? formatVND(v.min_order) : 'Không yêu cầu'}</td>
+                <td>
+                    <span style="font-weight: 600;">${usageRatio}</span>
+                </td>
+                <td style="font-size: 12px; color: var(--text-muted);">${dateRange}</td>
+                <td>
+                    ${v.active 
+                        ? '<span class="badge badge-success"><i class="fas fa-check"></i> Đang mở</span>' 
+                        : '<span class="badge badge-danger"><i class="fas fa-ban"></i> Đã đóng</span>'}
+                </td>
+                <td style="text-align: right;">
+                    <button class="btn btn-secondary btn-sm" onclick="openEditVoucherModal(${v.id})" title="Chỉnh sửa">
+                        <i class="fas fa-pen"></i>
+                    </button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteVoucher(${v.id}, '${v.code}')" title="Xóa mã">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+// On Voucher Type Change
+function onVoucherTypeChange(mode) {
+    const typeSelect = document.getElementById(`${mode}-v-type`);
+    const label = document.getElementById(`${mode}-v-val-label`);
+    if (typeSelect.value === 'percent') {
+        label.textContent = 'Mức giảm (%) *';
+    } else {
+        label.textContent = 'Số tiền giảm (VND) *';
+    }
+}
+
+// Open Add Voucher Modal
+function openAddVoucherModal() {
+    document.getElementById('add-voucher-form').reset();
+    document.getElementById('add-v-from').value = new Date().toISOString().split('T')[0];
+    const nextYear = new Date();
+    nextYear.setFullYear(nextYear.getFullYear() + 1);
+    document.getElementById('add-v-until').value = nextYear.toISOString().split('T')[0];
+    onVoucherTypeChange('add');
+    openModal('add-voucher-modal');
+}
+
+// Submit Add Voucher
+async function submitAddVoucher(e) {
+    e.preventDefault();
+    const payload = {
+        code: document.getElementById('add-v-code').value.trim().toUpperCase(),
+        type: document.getElementById('add-v-type').value,
+        value: document.getElementById('add-v-value').value,
+        min_order: document.getElementById('add-v-minorder').value || 0,
+        max_uses: document.getElementById('add-v-maxuses').value || 100,
+        valid_from: document.getElementById('add-v-from').value,
+        valid_until: document.getElementById('add-v-until').value,
+        active: true
+    };
+
+    try {
+        const res = await apiCall('/api/vouchers', 'POST', payload);
+        if (res.success) {
+            showToast('Tạo mã giảm giá mới thành công!');
+            closeModal('add-voucher-modal');
+            loadVouchers();
+        } else {
+            showToast(res.message || 'Lỗi tạo voucher', 'error');
+        }
+    } catch (e) {
+        showToast('Lỗi khi lưu mã giảm giá', 'error');
+    }
+}
+
+// Open Edit Voucher Modal
+function openEditVoucherModal(id) {
+    const v = allVouchersList.find(item => item.id === id);
+    if (!v) return;
+
+    document.getElementById('edit-v-id').value = v.id;
+    document.getElementById('edit-v-code').value = v.code;
+    document.getElementById('edit-v-type').value = v.type;
+    document.getElementById('edit-v-value').value = v.value;
+    document.getElementById('edit-v-minorder').value = v.min_order || 0;
+    document.getElementById('edit-v-maxuses').value = v.max_uses || 100;
+    document.getElementById('edit-v-from').value = v.valid_from || '';
+    document.getElementById('edit-v-until').value = v.valid_until || '';
+    document.getElementById('edit-v-active').checked = v.active;
+
+    onVoucherTypeChange('edit');
+    openModal('edit-voucher-modal');
+}
+
+// Submit Edit Voucher
+async function submitEditVoucher(e) {
+    e.preventDefault();
+    const id = document.getElementById('edit-v-id').value;
+    const payload = {
+        code: document.getElementById('edit-v-code').value.trim().toUpperCase(),
+        type: document.getElementById('edit-v-type').value,
+        value: document.getElementById('edit-v-value').value,
+        min_order: document.getElementById('edit-v-minorder').value || 0,
+        max_uses: document.getElementById('edit-v-maxuses').value || 100,
+        valid_from: document.getElementById('edit-v-from').value,
+        valid_until: document.getElementById('edit-v-until').value,
+        active: document.getElementById('edit-v-active').checked
+    };
+
+    try {
+        const res = await apiCall(`/api/vouchers/${id}`, 'PUT', payload);
+        if (res.success) {
+            showToast('Cập nhật mã giảm giá thành công!');
+            closeModal('edit-voucher-modal');
+            loadVouchers();
+        } else {
+            showToast(res.message || 'Lỗi cập nhật', 'error');
+        }
+    } catch (e) {
+        showToast('Lỗi khi cập nhật voucher', 'error');
+    }
+}
+
+// Delete Voucher
+function deleteVoucher(id, code) {
+    showConfirm('Xác nhận xóa voucher', `Bạn có chắc chắn muốn xóa mã "${code}" vĩnh viễn không?`, async () => {
+        try {
+            const res = await apiCall(`/api/vouchers/${id}`, 'DELETE');
+            if (res.success) {
+                showToast('Đã xóa mã voucher!');
+                loadVouchers();
+            } else {
+                showToast(res.message || 'Không thể xóa', 'error');
+            }
+        } catch (e) {
+            showToast('Lỗi khi xóa voucher', 'error');
+        }
+    });
+}
+
+// Test Validate Voucher
+async function testValidateVoucher() {
+    const code = document.getElementById('test-code-input').value.trim().toUpperCase();
+    const amount = Number(document.getElementById('test-amount-input').value || 0);
+
+    if (!code) {
+        showToast('Vui lòng nhập mã code để kiểm tra', 'warning');
+        return;
+    }
+
+    try {
+        const res = await apiCall('/api/vouchers/validate', 'POST', {
+            code: code,
+            order_amount: amount
+        });
+        if (res.valid) {
+            showToast(`Hợp lệ: Giảm ${formatVND(res.discount)}! (Khách chỉ trả: ${formatVND(res.final_amount)})`, 'success', 5000);
+        } else {
+            showToast(res.message || 'Mã không hợp lệ', 'error', 4000);
+        }
+    } catch (e) {
+        showToast('Lỗi kiểm tra mã', 'error');
+    }
+}
+
+document.addEventListener('DOMContentLoaded', loadVouchers);
+</script>
+{% endblock %}

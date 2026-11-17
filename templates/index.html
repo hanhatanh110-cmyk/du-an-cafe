@@ -1,0 +1,382 @@
+{% extends "base.html" %}
+
+{% block page_title %}Bảng điều khiển doanh thu{% endblock %}
+{% block page_subtitle %}Số liệu kinh doanh & hiệu suất hoạt động thời gian thực{% endblock %}
+
+{% block topbar_action %}
+<a href="/orders" class="btn btn-primary btn-sm">
+    <i class="fas fa-plus"></i> Tạo đơn mới (POS)
+</a>
+{% endblock %}
+
+{% block content %}
+<!-- Top Stats Grid -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-info">
+            <span>Doanh thu hôm nay</span>
+            <h3 id="stat-revenue">0 VND</h3>
+        </div>
+        <div class="stat-icon gold">
+            <i class="fas fa-coins"></i>
+        </div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-info">
+            <span>Đơn hàng hôm nay</span>
+            <h3 id="stat-orders">0</h3>
+        </div>
+        <div class="stat-icon blue">
+            <i class="fas fa-receipt"></i>
+        </div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-info">
+            <span>Bàn đang phục vụ</span>
+            <h3 id="stat-tables">0 / 0</h3>
+        </div>
+        <div class="stat-icon green">
+            <i class="fas fa-chair"></i>
+        </div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-info">
+            <span>Cảnh báo hết hàng</span>
+            <h3 id="stat-low-stock">0</h3>
+        </div>
+        <div class="stat-icon red">
+            <i class="fas fa-triangle-exclamation"></i>
+        </div>
+    </div>
+</div>
+
+<!-- ══ Revenue Filter Bar ══ -->
+<div class="card" style="margin-bottom: 20px; padding: 16px 24px;">
+    <div style="display:flex; align-items:center; flex-wrap:wrap; gap:12px;">
+        <span style="font-weight:600; color:var(--text-primary); font-size:14px;">
+            <i class="fas fa-filter" style="color:var(--primary-gold);margin-right:6px;"></i>Lọc doanh thu:
+        </span>
+
+        <!-- Quick period buttons -->
+        <div class="rev-period-tabs">
+            <button class="rev-tab active" data-period="7days">7 ngày</button>
+            <button class="rev-tab" data-period="30days">30 ngày</button>
+            <button class="rev-tab" data-period="month">Theo tháng</button>
+            <button class="rev-tab" data-period="year">Theo năm</button>
+            <button class="rev-tab" data-period="custom">Tùy chọn</button>
+        </div>
+
+        <!-- Month picker -->
+        <div id="filter-month" style="display:none; gap:8px; align-items:center;">
+            <input type="month" id="input-month" class="filter-input"
+                   value="" placeholder="Chọn tháng">
+        </div>
+
+        <!-- Year picker -->
+        <div id="filter-year" style="display:none; gap:8px; align-items:center;">
+            <input type="number" id="input-year" class="filter-input"
+                   min="2020" max="2099" placeholder="Năm" style="width:100px;">
+        </div>
+
+        <!-- Custom date range -->
+        <div id="filter-custom" style="display:none; gap:8px; align-items:center;">
+            <input type="date" id="input-from" class="filter-input" placeholder="Từ ngày">
+            <span style="color:var(--text-muted);">→</span>
+            <input type="date" id="input-to" class="filter-input" placeholder="Đến ngày">
+        </div>
+
+        <button id="btn-apply-filter" class="btn btn-primary btn-sm" onclick="applyFilter()">
+            <i class="fas fa-search"></i> Áp dụng
+        </button>
+
+        <!-- Period summary -->
+        <span id="period-summary" style="margin-left:auto; font-size:13px; color:var(--text-muted);"></span>
+    </div>
+</div>
+
+<!-- Charts Section -->
+<div class="charts-grid">
+    <!-- Revenue Trend Chart -->
+    <div class="card">
+        <div class="card-header">
+            <div class="card-title">
+                <i class="fas fa-chart-line"></i> <span id="chart-title">Doanh thu 7 ngày gần nhất</span>
+            </div>
+            <span class="badge badge-gold">Thời gian thực</span>
+        </div>
+        <div class="chart-container">
+            <canvas id="revenueTrendChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Category Revenue Pie Chart -->
+    <div class="card">
+        <div class="card-header">
+            <div class="card-title">
+                <i class="fas fa-chart-pie"></i> Doanh thu theo danh mục
+            </div>
+        </div>
+        <div class="chart-container">
+            <canvas id="categoryChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- Bottom Section: Top Selling Items & Recent Orders -->
+<div class="charts-grid" style="grid-template-columns: 1fr 1.6fr;">
+    <!-- Top 5 Best Sellers -->
+    <div class="card">
+        <div class="card-header">
+            <div class="card-title">
+                <i class="fas fa-crown"></i> Top 5 món bán chạy nhất
+            </div>
+        </div>
+        <div class="chart-container">
+            <canvas id="topItemsChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Recent Orders Table -->
+    <div class="card">
+        <div class="card-header">
+            <div class="card-title">
+                <i class="fas fa-clock-rotate-left"></i> Đơn hàng gần đây
+            </div>
+            <a href="/orders" class="btn btn-secondary btn-sm">Xem tất cả</a>
+        </div>
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Mã đơn</th>
+                        <th>Bàn</th>
+                        <th>Thời gian</th>
+                        <th>Tổng tiền</th>
+                        <th>Trạng thái</th>
+                        <th>Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody id="recent-orders-tbody">
+                    <tr>
+                        <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 24px;">
+                            <i class="fas fa-spinner fa-spin"></i> Đang tải đơn hàng...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+/* Period tab buttons */
+.rev-period-tabs {
+    display: flex;
+    gap: 4px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: 3px;
+}
+.rev-tab {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    padding: 6px 14px;
+    border-radius: 5px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.18s;
+    white-space: nowrap;
+}
+.rev-tab:hover { color: var(--text-primary); background: var(--bg-hover); }
+.rev-tab.active { background: var(--primary-gold); color: #111; font-weight: 700; }
+.filter-input {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-primary);
+    padding: 7px 12px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-family: inherit;
+}
+.filter-input:focus { outline: none; border-color: var(--primary-gold); }
+</style>
+
+<script>
+let revenueChart = null;
+let categoryChart = null;
+let topItemsChart = null;
+let currentPeriod = '7days';
+
+// ── Filter logic ───────────────────────────────────────────────
+document.querySelectorAll('.rev-tab').forEach(btn => {
+    btn.addEventListener('click', function () {
+        document.querySelectorAll('.rev-tab').forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+        currentPeriod = this.dataset.period;
+        // Show/hide sub-filters
+        document.getElementById('filter-month').style.display  = currentPeriod === 'month'  ? 'flex' : 'none';
+        document.getElementById('filter-year').style.display   = currentPeriod === 'year'   ? 'flex' : 'none';
+        document.getElementById('filter-custom').style.display = currentPeriod === 'custom' ? 'flex' : 'none';
+        // Auto-apply for quick periods
+        if (!['month','year','custom'].includes(currentPeriod)) applyFilter();
+    });
+});
+
+// Auto-fill defaults
+const now = new Date();
+document.getElementById('input-month').value = now.toISOString().slice(0,7);
+document.getElementById('input-year').value  = now.getFullYear();
+document.getElementById('input-from').value  = new Date(now - 7*86400000).toISOString().slice(0,10);
+document.getElementById('input-to').value    = now.toISOString().slice(0,10);
+
+async function applyFilter() {
+    let url = `/api/revenue?period=${currentPeriod}`;
+    let chartLabel = '7 ngày gần nhất';
+
+    if (currentPeriod === 'month') {
+        const m = document.getElementById('input-month').value;
+        if (!m) { showToast('Vui lòng chọn tháng!', 'warning'); return; }
+        url += `&month=${m}`;
+        chartLabel = `Tháng ${m}`;
+    } else if (currentPeriod === 'year') {
+        const y = document.getElementById('input-year').value;
+        if (!y) { showToast('Vui lòng nhập năm!', 'warning'); return; }
+        url += `&year=${y}`;
+        chartLabel = `Năm ${y}`;
+    } else if (currentPeriod === 'custom') {
+        const f = document.getElementById('input-from').value;
+        const t = document.getElementById('input-to').value;
+        if (!f || !t) { showToast('Vui lòng chọn ngày bắt đầu và kết thúc!', 'warning'); return; }
+        if (f > t) { showToast('Ngày bắt đầu phải trước ngày kết thúc!', 'warning'); return; }
+        url += `&date_from=${f}&date_to=${t}`;
+        chartLabel = `${f} → ${t}`;
+    } else if (currentPeriod === '30days') {
+        chartLabel = '30 ngày gần nhất';
+    }
+
+    document.getElementById('chart-title').textContent = `Doanh thu ${chartLabel}`;
+
+    try {
+        const revRes = await apiCall(url);
+        if (revRes.success) {
+            renderRevenueChart(revRes.daily_revenue);
+            renderCategoryChart(revRes.category_revenue);
+            renderTopItemsChart(revRes.top_items);
+            renderRecentOrders(revRes.recent_orders);
+            // Period summary
+            if (revRes.period_revenue !== undefined) {
+                document.getElementById('period-summary').textContent =
+                    `Tổng: ${formatVND(revRes.period_revenue)} / ${revRes.period_orders} đơn`;
+            }
+        } else {
+            showToast('Lỗi tải dữ liệu doanh thu!', 'error');
+        }
+    } catch (err) {
+        console.error(err);
+        showToast('Lỗi kết nối máy chủ!', 'error');
+    }
+}
+
+async function loadDashboardData() {
+    try {
+        const statsRes = await apiCall('/api/stats');
+        if (statsRes.success) {
+            document.getElementById('stat-revenue').textContent = formatVND(statsRes.today_revenue);
+            document.getElementById('stat-orders').textContent = statsRes.today_orders + ' đơn';
+            document.getElementById('stat-tables').textContent = `${statsRes.active_tables} / ${statsRes.total_tables}`;
+            document.getElementById('stat-low-stock').textContent = statsRes.low_stock_count + ' mặt hàng';
+            if (statsRes.low_stock_count > 0)
+                document.getElementById('stat-low-stock').style.color = 'var(--danger)';
+        }
+        await applyFilter(); // Load default 7-day chart
+    } catch (err) {
+        console.error('Failed to load dashboard:', err);
+    }
+}
+
+function renderRevenueChart(dailyData) {
+    const ctx = document.getElementById('revenueTrendChart').getContext('2d');
+    const labels = dailyData.map(d => d.label);
+    const revenues = dailyData.map(d => d.revenue);
+    if (revenueChart) revenueChart.destroy();
+    const gradient = ctx.createLinearGradient(0, 0, 0, 260);
+    gradient.addColorStop(0, 'rgba(200, 169, 126, 0.45)');
+    gradient.addColorStop(1, 'rgba(200, 169, 126, 0.0)');
+    revenueChart = new Chart(ctx, {
+        type: 'line',
+        data: { labels, datasets: [{ label: 'Doanh thu (VND)', data: revenues, borderColor: '#c8a97e', borderWidth: 2.5, backgroundColor: gradient, fill: true, tension: 0.38, pointBackgroundColor: '#dfc299', pointBorderColor: '#121316', pointBorderWidth: 2, pointRadius: 4.5, pointHoverRadius: 7 }] },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false }, tooltip: { backgroundColor: '#1f1f23', titleColor: '#f0f0f3', bodyColor: '#c8a97e', borderColor: '#333', borderWidth: 1, padding: 12,
+                callbacks: { label: ctx => 'Doanh thu: ' + formatVND(ctx.raw) } } },
+            scales: {
+                x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#888', font: { size: 11 }, maxRotation: 45 } },
+                y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#888', font: { size: 11 }, callback: v => (v/1000).toLocaleString('vi-VN') + 'k' } }
+            }
+        }
+    });
+}
+
+function renderCategoryChart(categoryData) {
+    const ctx = document.getElementById('categoryChart').getContext('2d');
+    const labels = Object.keys(categoryData);
+    const dataValues = Object.values(categoryData);
+    if (categoryChart) categoryChart.destroy();
+    const colors = ['#c8a97e','#3498db','#2ecc71','#e67e22','#9b59b6','#1abc9c','#e74c3c'];
+    categoryChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: { labels, datasets: [{ data: dataValues, backgroundColor: colors.slice(0, labels.length), borderColor: '#1c1d21', borderWidth: 3, hoverOffset: 6 }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#ccc', font: { size: 11 }, padding: 12 } }, tooltip: { backgroundColor: '#1f1f23', titleColor: '#fff', bodyColor: '#c8a97e', borderColor: '#333', borderWidth: 1, callbacks: { label: ctx => ' ' + ctx.label + ': ' + formatVND(ctx.raw) } } }, cutout: '68%' }
+    });
+}
+
+function renderTopItemsChart(topItems) {
+    const ctx = document.getElementById('topItemsChart').getContext('2d');
+    if (topItemsChart) topItemsChart.destroy();
+    topItemsChart = new Chart(ctx, {
+        type: 'bar',
+        data: { labels: topItems.map(i => i.name), datasets: [{ label: 'Số lượng đã bán', data: topItems.map(i => i.quantity), backgroundColor: '#c8a97e', borderRadius: 6, maxBarThickness: 32 }] },
+        options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { backgroundColor: '#1f1f23', titleColor: '#fff', bodyColor: '#c8a97e', borderColor: '#333', borderWidth: 1, callbacks: { label: ctx => 'Đã bán: ' + ctx.raw + ' phần' } } }, scales: { x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#888' } }, y: { grid: { display: false }, ticks: { color: '#ddd', font: { size: 11 } } } } }
+    });
+}
+
+function renderRecentOrders(orders) {
+    const tbody = document.getElementById('recent-orders-tbody');
+    if (!orders || orders.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:20px;">Chưa có đơn hàng nào.</td></tr>`;
+        return;
+    }
+    tbody.innerHTML = orders.map(o => {
+        let badge = '<span class="badge badge-warning">Đang phục vụ</span>';
+        if (o.status === 'completed') badge = '<span class="badge badge-success">Hoàn thành</span>';
+        if (o.status === 'cancelled') badge = '<span class="badge badge-danger">Đã hủy</span>';
+        return `<tr>
+            <td><strong>#HD${String(o.id).padStart(5,'0')}</strong></td>
+            <td><span class="badge badge-info">${o.table_number || 'Mang về'}</span></td>
+            <td>${o.created_at ? o.created_at.substring(11,16) : ''}</td>
+            <td><strong style="color:var(--primary-gold);">${formatVND(o.total)}</strong></td>
+            <td>${badge}</td>
+            <td><button class="btn btn-secondary btn-sm" onclick="viewBillDetails(${o.id})" title="Xem hóa đơn"><i class="fas fa-eye"></i></button></td>
+        </tr>`;
+    }).join('');
+}
+
+async function viewBillDetails(orderId) {
+    try {
+        const res = await apiCall(`/api/orders/${orderId}/bill`);
+        if (res.success && res.bill) printBillReceipt(res.bill);
+        else showToast(res.message || 'Không thể xem hóa đơn', 'error');
+    } catch (e) { showToast('Lỗi tải thông tin hóa đơn!', 'error'); }
+}
+
+document.addEventListener('DOMContentLoaded', loadDashboardData);
+</script>
+{% endblock %}

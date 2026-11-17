@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cafe Antigravity - Quản lý quán cà phê</title>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <!-- Custom Dark CSS -->
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="app-layout" id="app-layout">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar" id="sidebar">
+            <div class="brand">
+                <div class="brand-icon">
+                    <i class="fas fa-mug-hot"></i>
+                </div>
+                <div class="brand-info">
+                    <h2>ANTIGRAVITY</h2>
+                    <span>Cafe &amp; Lounge</span>
+                </div>
+            </div>
+
+            <ul class="nav-menu">
+                <li class="nav-item">
+                    <a href="/" class="nav-link {% if active_page == 'dashboard' %}active{% endif %}">
+                        <i class="fas fa-chart-pie"></i>
+                        <span>Tổng quan</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="/orders" class="nav-link {% if active_page == 'orders' %}active{% endif %}">
+                        <i class="fas fa-cash-register"></i>
+                        <span>Bán hàng (POS)</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="/tables" class="nav-link {% if active_page == 'tables' %}active{% endif %}">
+                        <i class="fas fa-couch"></i>
+                        <span>Quản lý bàn</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="/menu" class="nav-link {% if active_page == 'menu' %}active{% endif %}">
+                        <i class="fas fa-mug-saucer"></i>
+                        <span>Thực đơn</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="/members" class="nav-link {% if active_page == 'members' %}active{% endif %}">
+                        <i class="fas fa-id-card"></i>
+                        <span>Thẻ thành viên</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="/ingredients" class="nav-link {% if active_page == 'ingredients' %}active{% endif %}">
+                        <i class="fas fa-boxes-stacked"></i>
+                        <span>Kho nguyên liệu</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="/vouchers" class="nav-link {% if active_page == 'vouchers' %}active{% endif %}">
+                        <i class="fas fa-ticket-simple"></i>
+                        <span>Mã giảm giá</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="/staff" class="nav-link {% if active_page == 'staff' %}active{% endif %}">
+                        <i class="fas fa-user-gear"></i>
+                        <span>Nhân sự</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="/schedule" class="nav-link {% if active_page == 'schedule' %}active{% endif %}">
+                        <i class="fas fa-calendar-alt"></i>
+                        <span>Lịch làm việc</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="/salary" class="nav-link {% if active_page == 'salary' %}active{% endif %}">
+                        <i class="fas fa-money-bill-wave"></i>
+                        <span>Bảng lương</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="/barista" class="nav-link {% if active_page == 'barista' %}active{% endif %}">
+                        <i class="fas fa-blender"></i>
+                        <span>Màn hình pha chế</span>
+                    </a>
+                </li>
+            </ul>
+
+            <div class="sidebar-footer" id="sidebar-footer">
+                <div class="user-avatar">
+                    <i class="fas fa-user-shield" id="user-icon"></i>
+                </div>
+                <div class="user-details">
+                    <h4 id="user-display-name">Đang tải...</h4>
+                    <span id="user-display-role"></span>
+                </div>
+                <button onclick="doLogout()" title="Đăng xuất" style="background:transparent;border:none;color:var(--text-muted);cursor:pointer;margin-left:auto;font-size:16px;padding:4px;display:flex;align-items:center;justify-content:center;transition:color 0.2s;" onmouseover="this.style.color='var(--danger)'" onmouseout="this.style.color='var(--text-muted)'">
+                    <i class="fas fa-sign-out-alt"></i>
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Workspace -->
+        <div class="main-wrapper" id="main-wrapper">
+            <!-- Topbar Header -->
+            <header class="topbar">
+                <!-- Sidebar Toggle Button -->
+                <button class="sidebar-toggle" id="sidebar-toggle" title="Ẩn/hiện menu">
+                    <i class="fas fa-bars"></i>
+                </button>
+
+                <div class="page-title">
+                    <h1>{% block page_title %}Tổng quan{% endblock %}</h1>
+                    <span>{% block page_subtitle %}Hệ thống quản lý Cafe Antigravity{% endblock %}</span>
+                </div>
+
+                <div class="topbar-actions">
+                    <div id="live-clock" class="live-clock">
+                        <i class="far fa-clock"></i> <span>Đang tải...</span>
+                    </div>
+                    {% block topbar_action %}{% endblock %}
+                </div>
+            </header>
+
+            <!-- Page Dynamic Content -->
+            <main class="content-container">
+                {% block content %}{% endblock %}
+            </main>
+        </div>
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- Main JavaScript Scripts -->
+    <script src="/static/js/main.js"></script>
+    <script>
+    // ── Sidebar Toggle ──────────────────────────────────────────
+    (function() {
+        const layout   = document.getElementById('app-layout');
+        const sidebar  = document.getElementById('sidebar');
+        const wrapper  = document.getElementById('main-wrapper');
+        const btn      = document.getElementById('sidebar-toggle');
+        const KEY      = 'sidebar_collapsed';
+
+        function applyState(collapsed) {
+            if (collapsed) {
+                layout.classList.add('sidebar-collapsed');
+            } else {
+                layout.classList.remove('sidebar-collapsed');
+            }
+        }
+
+        // Restore saved preference
+        applyState(localStorage.getItem(KEY) === '1');
+
+        btn.addEventListener('click', function() {
+            const collapsed = layout.classList.contains('sidebar-collapsed');
+            applyState(!collapsed);
+            localStorage.setItem(KEY, collapsed ? '0' : '1');
+        });
+    })();
+
+    // ── Current User Authentication & Nav Access ───────────────
+    async function loadCurrentUser() {
+        try {
+            const res = await apiCall('/api/auth/me');
+            if (res.logged_in) {
+                const roleMap = {owner:'Chủ quán', manager:'Quản lý', cashier:'Thu ngân', barista:'Pha chế', waiter:'Phục vụ'};
+                document.getElementById('user-display-name').textContent = res.user.full_name;
+                document.getElementById('user-display-role').textContent = roleMap[res.user.role] || res.user.role;
+                window._currentUser = res.user;
+
+                // Restrict UI navigation links based on role
+                applyNavRoleRestrictions(res.user.role);
+            } else {
+                if (window.location.pathname !== '/login') window.location.href = '/login';
+            }
+        } catch(e) {}
+    }
+
+    function applyNavRoleRestrictions(role) {
+        // If not owner/manager, hide salary nav
+        if (!['owner', 'manager'].includes(role)) {
+            const salaryNav = document.querySelector('a[href="/salary"]');
+            if (salaryNav && salaryNav.closest('.nav-item')) {
+                salaryNav.closest('.nav-item').style.display = 'none';
+            }
+        }
+        // If barista, direct attention to barista view
+        if (role === 'barista') {
+            const staffNav = document.querySelector('a[href="/staff"]');
+            if (staffNav && staffNav.closest('.nav-item')) {
+                staffNav.closest('.nav-item').style.display = 'none';
+            }
+        }
+    }
+
+    async function doLogout() {
+        await apiCall('/api/auth/logout', 'POST');
+        window.location.href = '/login';
+    }
+    document.addEventListener('DOMContentLoaded', loadCurrentUser);
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

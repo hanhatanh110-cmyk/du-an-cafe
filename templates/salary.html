@@ -1,0 +1,395 @@
+{% extends "base.html" %}
+{% block page_title %}Bảng lương nhân viên{% endblock %}
+{% block page_subtitle %}Tính toán, theo dõi và quản lý chi trả lương theo tháng{% endblock %}
+
+{% block topbar_action %}
+<div id="salary-actions" style="display:flex;gap:10px;">
+    <button class="btn btn-secondary btn-sm" onclick="autoGenerateSalary()" id="btn-auto-salary" style="display:none;">
+        <i class="fas fa-wand-magic-sparkles"></i> Tính lương tự động
+    </button>
+    <button class="btn btn-primary btn-sm" onclick="openAddSalaryModal()" id="btn-add-salary" style="display:none;">
+        <i class="fas fa-plus"></i> Thêm phiếu lương
+    </button>
+</div>
+{% endblock %}
+
+{% block content %}
+<!-- Summary Stats Cards (Collapsible) -->
+<div class="card" style="margin-bottom:20px;">
+    <div class="card-header" style="cursor:pointer;" onclick="togglePanel('salary-summary-panel', this)">
+        <div class="card-title"><i class="fas fa-chart-line"></i> Tổng quan quỹ lương</div>
+        <i class="fas fa-chevron-up panel-toggle-icon"></i>
+    </div>
+    <div id="salary-summary-panel" style="padding:20px 24px;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:16px;">
+            <div style="background:var(--bg-surface);padding:16px;border-radius:var(--radius-md);border:1px solid var(--border-subtle);">
+                <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">Tổng quỹ lương</div>
+                <div id="stat-total-pool" style="font-size:20px;font-weight:700;color:var(--primary-gold);">0 VND</div>
+            </div>
+            <div style="background:var(--bg-surface);padding:16px;border-radius:var(--radius-md);border:1px solid var(--border-subtle);">
+                <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">Đã thanh toán</div>
+                <div id="stat-paid-pool" style="font-size:20px;font-weight:700;color:var(--success);">0 VND</div>
+            </div>
+            <div style="background:var(--bg-surface);padding:16px;border-radius:var(--radius-md);border:1px solid var(--border-subtle);">
+                <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">Chưa thanh toán</div>
+                <div id="stat-unpaid-pool" style="font-size:20px;font-weight:700;color:var(--danger);">0 VND</div>
+            </div>
+            <div style="background:var(--bg-surface);padding:16px;border-radius:var(--radius-md);border:1px solid var(--border-subtle);">
+                <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">Số nhân sự nhận lương</div>
+                <div id="stat-staff-count" style="font-size:20px;font-weight:700;color:var(--text-primary);">0</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card" style="margin-bottom:20px;padding:16px 20px;">
+    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;justify-content:space-between;">
+        <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;">
+            <div>
+                <label class="form-label" style="margin:0 0 4px 0;">Kỳ trả lương (Tháng)</label>
+                <input type="month" id="salary-month" class="form-control" style="width:170px;" onchange="loadSalaryData()">
+            </div>
+            <div>
+                <label class="form-label" style="margin:0 0 4px 0;">Trạng thái chi trả</label>
+                <select id="salary-status-filter" class="form-select" style="width:160px;" onchange="renderSalaryTable()">
+                    <option value="all">Tất cả</option>
+                    <option value="paid">Đã thanh toán</option>
+                    <option value="unpaid">Chưa thanh toán</option>
+                </select>
+            </div>
+        </div>
+        <div>
+            <span id="salary-info-badge" class="badge badge-gold" style="padding:6px 14px;font-size:13px;"></span>
+        </div>
+    </div>
+</div>
+
+<!-- Salary Records Table -->
+<div class="card">
+    <div class="card-header">
+        <div class="card-title">
+            <i class="fas fa-file-invoice-dollar"></i> Danh sách bảng lương chi tiết (<span id="salary-count">0</span> bản ghi)
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Nhân viên</th>
+                    <th>Vị trí</th>
+                    <th>Số ngày công</th>
+                    <th>Lương cơ bản</th>
+                    <th>Thưởng</th>
+                    <th>Khấu trừ</th>
+                    <th>Thực nhận</th>
+                    <th>Trạng thái</th>
+                    <th>Ghi chú</th>
+                    <th style="text-align:right;">Thao tác</th>
+                </tr>
+            </thead>
+            <tbody id="salary-tbody">
+                <tr>
+                    <td colspan="10" style="text-align:center;color:var(--text-muted);padding:30px;">
+                        <i class="fas fa-spinner fa-spin fa-2x"></i>
+                        <p style="margin-top:10px;">Đang tải dữ liệu bảng lương...</p>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal: Thêm / Sửa phiếu lương -->
+<div class="modal-backdrop" id="modal-salary">
+    <div class="modal-box" style="max-width:480px;">
+        <div class="modal-header">
+            <h3 id="modal-salary-title" style="color:var(--primary-gold);"><i class="fas fa-money-check-dollar"></i> Cập nhật phiếu lương</h3>
+            <button class="modal-close-btn" onclick="closeModal('modal-salary')">&times;</button>
+        </div>
+        <form id="form-salary" onsubmit="submitSalaryForm(event)">
+            <div class="modal-body">
+                <input type="hidden" id="sal-id">
+                
+                <div class="form-group" id="sal-staff-group">
+                    <label class="form-label">Nhân viên *</label>
+                    <select id="sal-staff-id" class="form-select" onchange="onStaffSelected()"></select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Tháng chi trả *</label>
+                    <input type="month" id="sal-month" class="form-control" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Lương cơ bản (VND) *</label>
+                    <input type="number" id="sal-base" class="form-control" min="0" step="1" required oninput="calcSalaryTotalPreview()">
+                </div>
+
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                    <div class="form-group">
+                        <label class="form-label">Thưởng (VND)</label>
+                        <input type="number" id="sal-bonus" class="form-control" min="0" step="1" value="0" oninput="calcSalaryTotalPreview()">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Khấu trừ / Phạt (VND)</label>
+                        <input type="number" id="sal-deduction" class="form-control" min="0" step="1" value="0" oninput="calcSalaryTotalPreview()">
+                    </div>
+                </div>
+
+                <div style="background:var(--bg-surface);padding:12px 16px;border-radius:var(--radius-sm);margin-bottom:16px;border:1px solid var(--border-subtle);display:flex;justify-content:space-between;align-items:center;">
+                    <span style="font-size:13px;color:var(--text-secondary);">Tổng thực nhận dự kiến:</span>
+                    <strong id="sal-total-preview" style="color:var(--primary-gold);font-size:16px;">0 VND</strong>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Ghi chú</label>
+                    <input type="text" id="sal-note" class="form-control" placeholder="Lý do thưởng, phạt hoặc phụ cấp...">
+                </div>
+
+                <div class="form-group">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:var(--text-primary);font-size:13px;">
+                        <input type="checkbox" id="sal-paid" style="width:16px;height:16px;accent-color:var(--success);">
+                        Đã chi trả lương cho nhân viên
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="closeModal('modal-salary')">Hủy</button>
+                <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-save"></i> Lưu phiếu lương</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let salaryRecords = [];
+let allStaffList = [];
+let currentUserRole = '';
+
+async function initSalaryPage() {
+    const me = await apiCall('/api/auth/me');
+    if (me.logged_in) {
+        currentUserRole = me.user.role;
+        if (['owner', 'manager'].includes(currentUserRole)) {
+            document.getElementById('btn-auto-salary').style.display = '';
+            document.getElementById('btn-add-salary').style.display = '';
+        }
+    }
+
+    const staffData = await apiCall('/api/staff');
+    allStaffList = Array.isArray(staffData) ? staffData : [];
+
+    // Populate staff dropdown
+    const staffSelect = document.getElementById('sal-staff-id');
+    staffSelect.innerHTML = allStaffList.map(s => `<option value="${s.id}" data-salary="${s.salary}">${s.name} (${s.role})</option>`).join('');
+
+    const now = new Date();
+    const curMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    document.getElementById('salary-month').value = curMonthStr;
+
+    await loadSalaryData();
+}
+
+async function loadSalaryData() {
+    const month = document.getElementById('salary-month').value;
+    document.getElementById('salary-info-badge').textContent = `Tháng ${month.split('-')[1]}/${month.split('-')[0]}`;
+    salaryRecords = await apiCall(`/api/salary?month=${month}`) || [];
+    renderSalaryTable();
+    updateSummaryStats();
+}
+
+function updateSummaryStats() {
+    let totalPool = 0;
+    let paidPool = 0;
+    let unpaidPool = 0;
+
+    salaryRecords.forEach(r => {
+        totalPool += r.total;
+        if (r.paid) paidPool += r.total;
+        else unpaidPool += r.total;
+    });
+
+    document.getElementById('stat-total-pool').textContent = formatVND(totalPool);
+    document.getElementById('stat-paid-pool').textContent = formatVND(paidPool);
+    document.getElementById('stat-unpaid-pool').textContent = formatVND(unpaidPool);
+    document.getElementById('stat-staff-count').textContent = salaryRecords.length;
+}
+
+function renderSalaryTable() {
+    const filter = document.getElementById('salary-status-filter').value;
+    let filtered = salaryRecords;
+    if (filter === 'paid') filtered = salaryRecords.filter(r => r.paid);
+    if (filter === 'unpaid') filtered = salaryRecords.filter(r => !r.paid);
+
+    const tbody = document.getElementById('salary-tbody');
+    document.getElementById('salary-count').textContent = filtered.length;
+
+    if (filtered.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="10" style="text-align:center;color:var(--text-muted);padding:36px;">
+                    Chưa có phiếu lương nào cho tháng này.
+                    ${['owner','manager'].includes(currentUserRole) ? '<br><small>Nhấn "Tính lương tự động" hoặc "Thêm phiếu lương" để bắt đầu.</small>' : ''}
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    const canEdit = ['owner', 'manager'].includes(currentUserRole);
+
+    tbody.innerHTML = filtered.map(r => `
+        <tr>
+            <td><strong>${r.staff_name || 'Nhân viên #' + r.staff_id}</strong></td>
+            <td><span class="badge badge-gold">${r.staff_role || 'Nhân viên'}</span></td>
+            <td style="text-align:center;"><span class="badge" style="background:#26272c;color:var(--text-primary);padding:4px 10px;">${r.days_worked || 0} ca</span></td>
+            <td>${formatVND(r.base_salary)}</td>
+            <td style="color:var(--success);">+${formatVND(r.bonus)}</td>
+            <td style="color:var(--danger);">${r.deduction > 0 ? '-' : ''}${formatVND(r.deduction)}</td>
+            <td><strong style="color:var(--primary-gold);font-size:14px;">${formatVND(r.total)}</strong></td>
+            <td>
+                <span class="badge ${r.paid ? 'badge-success' : 'badge-danger'}" 
+                      style="${canEdit ? 'cursor:pointer;' : ''}border:none;display:inline-flex;align-items:center;gap:4px;"
+                      ${canEdit ? `onclick="togglePaidStatus(${r.id}, ${!r.paid})"` : ''}
+                      title="${canEdit ? 'Bấm để đổi trạng thái chi trả' : ''}">
+                    <i class="fas ${r.paid ? 'fa-check' : 'fa-hourglass-half'}"></i>
+                    ${r.paid ? 'Đã chi trả' : 'Chưa trả'}
+                </span>
+            </td>
+            <td style="font-size:12px;color:var(--text-muted);max-width:180px;">${r.note || '-'}</td>
+            <td style="text-align:right;">
+                ${canEdit ? `
+                    <button class="btn btn-secondary btn-sm" onclick="openEditSalaryModal(${r.id})" title="Chỉnh sửa">
+                        <i class="fas fa-pen"></i>
+                    </button>
+                ` : `<span style="color:var(--text-muted);font-size:12px;">Chỉ xem</span>`}
+            </td>
+        </tr>
+    `).join('');
+}
+
+async function togglePaidStatus(id, newPaid) {
+    try {
+        const res = await apiCall(`/api/salary/${id}`, 'PUT', { paid: newPaid });
+        if (res.success !== false) {
+            showToast(`Đã chuyển trạng thái: ${newPaid ? 'Đã thanh toán' : 'Chưa thanh toán'}`);
+            loadSalaryData();
+        } else {
+            showToast(res.message || 'Lỗi cập nhật trạng thái', 'error');
+        }
+    } catch(e) {
+        showToast('Lỗi khi đổi trạng thái chi trả', 'error');
+    }
+}
+
+function openAddSalaryModal() {
+    document.getElementById('form-salary').reset();
+    document.getElementById('sal-id').value = '';
+    document.getElementById('modal-salary-title').innerHTML = '<i class="fas fa-plus-circle"></i> Thêm phiếu lương mới';
+    document.getElementById('sal-staff-group').style.display = '';
+    document.getElementById('sal-month').value = document.getElementById('salary-month').value;
+    onStaffSelected();
+    calcSalaryTotalPreview();
+    openModal('modal-salary');
+}
+
+function onStaffSelected() {
+    const sel = document.getElementById('sal-staff-id');
+    const opt = sel.options[sel.selectedIndex];
+    if (opt && opt.dataset.salary) {
+        document.getElementById('sal-base').value = opt.dataset.salary;
+        calcSalaryTotalPreview();
+    }
+}
+
+function openEditSalaryModal(id) {
+    const record = salaryRecords.find(r => r.id === id);
+    if (!record) return;
+
+    document.getElementById('sal-id').value = record.id;
+    document.getElementById('modal-salary-title').innerHTML = `<i class="fas fa-pen-to-square"></i> Cập nhật phiếu lương: ${record.staff_name}`;
+    document.getElementById('sal-staff-id').value = record.staff_id;
+    document.getElementById('sal-staff-group').style.display = 'none';
+    document.getElementById('sal-month').value = record.month;
+    document.getElementById('sal-base').value = record.base_salary;
+    document.getElementById('sal-bonus').value = record.bonus;
+    document.getElementById('sal-deduction').value = record.deduction;
+    document.getElementById('sal-note').value = record.note;
+    document.getElementById('sal-paid').checked = record.paid;
+
+    calcSalaryTotalPreview();
+    openModal('modal-salary');
+}
+
+function calcSalaryTotalPreview() {
+    const base = parseFloat(document.getElementById('sal-base').value) || 0;
+    const bonus = parseFloat(document.getElementById('sal-bonus').value) || 0;
+    const deduction = parseFloat(document.getElementById('sal-deduction').value) || 0;
+    const total = base + bonus - deduction;
+    document.getElementById('sal-total-preview').textContent = formatVND(total);
+}
+
+async function submitSalaryForm(e) {
+    e.preventDefault();
+    const id = document.getElementById('sal-id').value;
+    const payload = {
+        staff_id: parseInt(document.getElementById('sal-staff-id').value),
+        month: document.getElementById('sal-month').value,
+        base_salary: parseFloat(document.getElementById('sal-base').value) || 0,
+        bonus: parseFloat(document.getElementById('sal-bonus').value) || 0,
+        deduction: parseFloat(document.getElementById('sal-deduction').value) || 0,
+        note: document.getElementById('sal-note').value.trim(),
+        paid: document.getElementById('sal-paid').checked
+    };
+
+    const url = id ? `/api/salary/${id}` : '/api/salary';
+    const method = id ? 'PUT' : 'POST';
+
+    try {
+        const res = await apiCall(url, method, payload);
+        if (res.success !== false) {
+            showToast('Lưu phiếu lương thành công!');
+            closeModal('modal-salary');
+            loadSalaryData();
+        } else {
+            showToast(res.message || 'Lỗi lưu phiếu lương', 'error');
+        }
+    } catch(e) {
+        showToast('Lỗi kết nối khi lưu phiếu lương', 'error');
+    }
+}
+
+async function autoGenerateSalary() {
+    const month = document.getElementById('salary-month').value;
+    if (!month) return;
+
+    showConfirm('Tính lương tự động', `Hệ thống sẽ tổng hợp số ngày công từ lịch làm việc và lập bảng lương cho toàn bộ nhân viên trong tháng ${month}. Tiếp tục?`, async () => {
+        let createdCount = 0;
+        for (const staff of allStaffList) {
+            if (!staff.active) continue;
+            // Check if already exists
+            const exists = salaryRecords.some(r => r.staff_id === staff.id && r.month === month);
+            if (!exists) {
+                const payload = {
+                    staff_id: staff.id,
+                    month: month,
+                    base_salary: staff.salary || 0,
+                    bonus: 0,
+                    deduction: 0,
+                    note: 'Tính tự động từ lịch làm việc'
+                };
+                await apiCall('/api/salary', 'POST', payload);
+                createdCount++;
+            }
+        }
+        showToast(`Đã tạo bảng lương cho ${createdCount} nhân viên!`);
+        loadSalaryData();
+    });
+}
+
+document.addEventListener('DOMContentLoaded', initSalaryPage);
+</script>
+{% endblock %}

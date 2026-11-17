@@ -1,0 +1,454 @@
+{% extends "base.html" %}
+
+{% block page_title %}Quản lý Thực đơn{% endblock %}
+{% block page_subtitle %}Danh mục đồ uống, bánh ngọt & thiết lập giá bán{% endblock %}
+
+{% block topbar_action %}
+<div style="display: flex; gap: 10px;">
+    <button class="btn btn-secondary btn-sm" onclick="openAddCategoryModal()">
+        <i class="fas fa-folder-plus"></i> Thêm danh mục
+    </button>
+    <button class="btn btn-primary btn-sm" onclick="openAddMenuModal()">
+        <i class="fas fa-plus"></i> Thêm món mới
+    </button>
+</div>
+{% endblock %}
+
+{% block content %}
+<!-- Top Filter Bar -->
+<div class="card" style="margin-bottom: 24px; padding: 18px 20px;">
+    <div style="display: flex; gap: 16px; flex-wrap: wrap; align-items: center; justify-content: space-between;">
+        <!-- Search -->
+        <div class="search-box" style="flex: 1; min-width: 260px;">
+            <i class="fas fa-magnifying-glass"></i>
+            <input type="text" id="menu-search-input" class="form-control" placeholder="Tìm theo tên món hoặc mô tả..." oninput="filterMenuTable()">
+        </div>
+
+        <!-- Category Dropdown Filter -->
+        <div style="display: flex; gap: 10px; align-items: center;">
+            <label class="form-label" style="margin: 0; white-space: nowrap;">Danh mục:</label>
+            <select id="menu-cat-filter" class="form-select" style="width: 170px;" onchange="filterMenuTable()">
+                <option value="all">Tất cả danh mục</option>
+                <!-- Categories loaded dynamically -->
+            </select>
+        </div>
+
+        <!-- Availability Filter -->
+        <div style="display: flex; gap: 10px; align-items: center;">
+            <label class="form-label" style="margin: 0; white-space: nowrap;">Trạng thái:</label>
+            <select id="menu-status-filter" class="form-select" style="width: 150px;" onchange="filterMenuTable()">
+                <option value="all">Tất cả</option>
+                <option value="available">Đang phục vụ</option>
+                <option value="unavailable">Tạm ngưng</option>
+            </select>
+        </div>
+    </div>
+</div>
+
+<!-- Menu Items Table -->
+<div class="card">
+    <div class="card-header">
+        <div class="card-title">
+            <i class="fas fa-utensils"></i> Danh sách món ăn & đồ uống (<span id="menu-items-count">0</span> món)
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Tên món</th>
+                    <th>Danh mục</th>
+                    <th>Giá bán (VND)</th>
+                    <th>Mô tả</th>
+                    <th>Trạng thái</th>
+                    <th style="text-align: right;">Thao tác</th>
+                </tr>
+            </thead>
+            <tbody id="menu-items-tbody">
+                <tr>
+                    <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 30px;">
+                        <i class="fas fa-spinner fa-spin fa-2x"></i>
+                        <p style="margin-top: 10px;">Đang tải danh sách món...</p>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal: Thêm món mới (Add Menu Item) -->
+<div id="add-menu-modal" class="modal-backdrop">
+    <div class="modal-box">
+        <div class="modal-header">
+            <h3 style="color: var(--primary-gold);"><i class="fas fa-plus-circle"></i> Thêm món mới vào thực đơn</h3>
+            <button class="modal-close-btn" onclick="closeModal('add-menu-modal')">&times;</button>
+        </div>
+        <form id="add-menu-form" onsubmit="submitAddMenuItem(event)">
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Tên món *</label>
+                    <input type="text" id="add-item-name" class="form-control" placeholder="Ví dụ: Cà phê trứng, Trà đào cam sả..." required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Danh mục *</label>
+                    <select id="add-item-category" class="form-select" required>
+                        <!-- Loaded dynamically -->
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Giá bán (VND) *</label>
+                    <input type="number" id="add-item-price" class="form-control" placeholder="Ví dụ: 35000" min="0" step="1000" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Mô tả hương vị / Thành phần</label>
+                    <textarea id="add-item-desc" class="form-control" placeholder="Mô tả ngắn gọn về hương vị và điểm đặc biệt của món..."></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-primary); font-size: 13px;">
+                        <input type="checkbox" id="add-item-available" checked style="width: 16px; height: 16px; accent-color: var(--primary-gold);">
+                        Đang mở bán ngay (Sẵn sàng phục vụ)
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="closeModal('add-menu-modal')">Hủy</button>
+                <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-save"></i> Thêm món</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal: Sửa món (Edit Menu Item) -->
+<div id="edit-menu-modal" class="modal-backdrop">
+    <div class="modal-box">
+        <div class="modal-header">
+            <h3 style="color: var(--primary-gold);"><i class="fas fa-pen-to-square"></i> Cập nhật thông tin món</h3>
+            <button class="modal-close-btn" onclick="closeModal('edit-menu-modal')">&times;</button>
+        </div>
+        <form id="edit-menu-form" onsubmit="submitEditMenuItem(event)">
+            <div class="modal-body">
+                <input type="hidden" id="edit-item-id">
+                <div class="form-group">
+                    <label class="form-label">Tên món *</label>
+                    <input type="text" id="edit-item-name" class="form-control" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Danh mục *</label>
+                    <select id="edit-item-category" class="form-select" required>
+                        <!-- Loaded dynamically -->
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Giá bán (VND) *</label>
+                    <input type="number" id="edit-item-price" class="form-control" min="0" step="1000" required>
+                    <small id="edit-price-help" style="display:none;color:var(--danger);font-size:11px;margin-top:4px;">Chỉ chủ quán và quản lý mới được thay đổi giá món.</small>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Mô tả</label>
+                    <textarea id="edit-item-desc" class="form-control"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-primary); font-size: 13px;">
+                        <input type="checkbox" id="edit-item-available" style="width: 16px; height: 16px; accent-color: var(--primary-gold);">
+                        Đang mở bán (Sẵn sàng phục vụ)
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="closeModal('edit-menu-modal')">Hủy</button>
+                <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-check"></i> Cập nhật</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal: Thêm danh mục (Add Category Modal) -->
+<div id="add-category-modal" class="modal-backdrop">
+    <div class="modal-box" style="max-width: 440px;">
+        <div class="modal-header">
+            <h3 style="color: var(--primary-gold);"><i class="fas fa-folder-plus"></i> Thêm danh mục mới</h3>
+            <button class="modal-close-btn" onclick="closeModal('add-category-modal')">&times;</button>
+        </div>
+        <form id="add-category-form" onsubmit="submitAddCategory(event)">
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Tên danh mục *</label>
+                    <input type="text" id="add-cat-name" class="form-control" placeholder="Ví dụ: Cà phê, Trà trái cây..." required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Mô tả danh mục</label>
+                    <textarea id="add-cat-desc" class="form-control" placeholder="Ghi chú về nhóm đồ uống này..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="closeModal('add-category-modal')">Hủy</button>
+                <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-save"></i> Tạo danh mục</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let fullMenuList = [];
+let categoriesList = [];
+
+// Initialize
+async function initMenuPage() {
+    try {
+        const [menuData, catData] = await Promise.all([
+            apiCall('/api/menu'),
+            apiCall('/api/categories')
+        ]);
+        fullMenuList = menuData;
+        categoriesList = catData;
+
+        populateCategoryDropdowns();
+        renderMenuTable(fullMenuList);
+    } catch (e) {
+        console.error('Failed to init menu page:', e);
+    }
+}
+
+// Populate Category Dropdowns
+function populateCategoryDropdowns() {
+    const filterSelect = document.getElementById('menu-cat-filter');
+    const addSelect = document.getElementById('add-item-category');
+    const editSelect = document.getElementById('edit-item-category');
+
+    const options = categoriesList.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+
+    filterSelect.innerHTML = `<option value="all">Tất cả danh mục</option>` + options;
+    addSelect.innerHTML = options;
+    editSelect.innerHTML = options;
+}
+
+// Filter Menu Table
+function filterMenuTable() {
+    const keyword = document.getElementById('menu-search-input').value.trim().toLowerCase();
+    const cat = document.getElementById('menu-cat-filter').value;
+    const status = document.getElementById('menu-status-filter').value;
+
+    const filtered = fullMenuList.filter(item => {
+        const matchSearch = (!keyword || item.name.toLowerCase().includes(keyword) || (item.description && item.description.toLowerCase().includes(keyword)));
+        const matchCat = (cat === 'all' || item.category === cat);
+        let matchStatus = true;
+        if (status === 'available') matchStatus = item.available === true;
+        if (status === 'unavailable') matchStatus = item.available === false;
+        return matchSearch && matchCat && matchStatus;
+    });
+
+    renderMenuTable(filtered);
+}
+
+// Render Menu Table
+function renderMenuTable(items) {
+    const tbody = document.getElementById('menu-items-tbody');
+    document.getElementById('menu-items-count').textContent = items.length;
+
+    if (items.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 40px;">
+                    Không tìm thấy món ăn nào phù hợp với bộ lọc.
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    tbody.innerHTML = items.map(item => `
+        <tr>
+            <td><strong>${item.name}</strong></td>
+            <td><span class="badge badge-gold">${item.category}</span></td>
+            <td><strong style="color: var(--primary-gold);">${formatVND(item.price)}</strong></td>
+            <td style="color: var(--text-muted); max-width: 250px; font-size: 12px;">${item.description || 'Chưa có mô tả'}</td>
+            <td>
+                <button class="badge ${item.available ? 'badge-success' : 'badge-danger'}" 
+                        style="cursor: pointer; border: none;"
+                        onclick="toggleItemAvailability(${item.id}, ${!item.available})"
+                        title="Bấm để đổi trạng thái">
+                    <i class="fas ${item.available ? 'fa-check' : 'fa-xmark'}"></i>
+                    ${item.available ? 'Đang bán' : 'Tạm hết'}
+                </button>
+            </td>
+            <td style="text-align: right;">
+                <button class="btn btn-secondary btn-sm" onclick="openEditMenuModal(${item.id})" title="Chỉnh sửa">
+                    <i class="fas fa-pen"></i>
+                </button>
+                <button class="btn btn-danger btn-sm" onclick="deleteMenuItem(${item.id}, '${item.name}')" title="Xóa món">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+// Toggle Item Availability
+async function toggleItemAvailability(id, newStatus) {
+    try {
+        const res = await apiCall(`/api/menu/${id}`, 'PUT', { available: newStatus });
+        if (res.success) {
+            showToast(`Đã chuyển trạng thái: ${newStatus ? 'Đang mở bán' : 'Tạm ngưng'}`);
+            reloadMenu();
+        } else {
+            showToast(res.message || 'Lỗi cập nhật', 'error');
+        }
+    } catch (e) {
+        showToast('Lỗi khi đổi trạng thái món', 'error');
+    }
+}
+
+// Open Add Menu Modal
+function openAddMenuModal() {
+    document.getElementById('add-menu-form').reset();
+    document.getElementById('add-item-available').checked = true;
+    openModal('add-menu-modal');
+}
+
+// Submit Add Menu Item
+async function submitAddMenuItem(e) {
+    e.preventDefault();
+    const payload = {
+        name: document.getElementById('add-item-name').value.trim(),
+        category: document.getElementById('add-item-category').value,
+        price: document.getElementById('add-item-price').value,
+        description: document.getElementById('add-item-desc').value.trim(),
+        available: document.getElementById('add-item-available').checked
+    };
+
+    try {
+        const res = await apiCall('/api/menu', 'POST', payload);
+        if (res.success) {
+            showToast('Thêm món mới thành công!');
+            closeModal('add-menu-modal');
+            reloadMenu();
+        } else {
+            showToast(res.message || 'Lỗi thêm món', 'error');
+        }
+    } catch (e) {
+        showToast('Lỗi khi lưu món mới', 'error');
+    }
+}
+
+// Open Edit Menu Modal
+function openEditMenuModal(id) {
+    const item = fullMenuList.find(i => i.id === id);
+    if (!item) return;
+
+    document.getElementById('edit-item-id').value = item.id;
+    document.getElementById('edit-item-name').value = item.name;
+    document.getElementById('edit-item-category').value = item.category;
+    const priceInput = document.getElementById('edit-item-price');
+    priceInput.value = item.price;
+    const priceHelp = document.getElementById('edit-price-help');
+
+    // Restrict price editing for staff
+    if (window._currentUser && !['owner', 'manager'].includes(window._currentUser.role)) {
+        priceInput.readOnly = true;
+        priceInput.style.backgroundColor = 'var(--bg-dark)';
+        priceInput.style.cursor = 'not-allowed';
+        if (priceHelp) priceHelp.style.display = 'block';
+    } else {
+        priceInput.readOnly = false;
+        priceInput.style.backgroundColor = '';
+        priceInput.style.cursor = '';
+        if (priceHelp) priceHelp.style.display = 'none';
+    }
+
+    document.getElementById('edit-item-desc').value = item.description || '';
+    document.getElementById('edit-item-available').checked = item.available;
+
+    openModal('edit-menu-modal');
+}
+
+// Submit Edit Menu Item
+async function submitEditMenuItem(e) {
+    e.preventDefault();
+    const id = document.getElementById('edit-item-id').value;
+    const payload = {
+        name: document.getElementById('edit-item-name').value.trim(),
+        category: document.getElementById('edit-item-category').value,
+        price: document.getElementById('edit-item-price').value,
+        description: document.getElementById('edit-item-desc').value.trim(),
+        available: document.getElementById('edit-item-available').checked
+    };
+
+    try {
+        const res = await apiCall(`/api/menu/${id}`, 'PUT', payload);
+        if (res.success) {
+            showToast('Cập nhật món thành công!');
+            closeModal('edit-menu-modal');
+            reloadMenu();
+        } else {
+            showToast(res.message || 'Lỗi cập nhật', 'error');
+        }
+    } catch (e) {
+        showToast('Lỗi khi cập nhật món', 'error');
+    }
+}
+
+// Delete Menu Item
+function deleteMenuItem(id, name) {
+    showConfirm('Xác nhận xóa món', `Bạn có chắc chắn muốn xóa "${name}" khỏi thực đơn không?`, async () => {
+        try {
+            const res = await apiCall(`/api/menu/${id}`, 'DELETE');
+            if (res.success) {
+                showToast('Đã xóa món thành công!');
+                reloadMenu();
+            } else {
+                showToast(res.message || 'Không thể xóa món', 'error');
+            }
+        } catch (e) {
+            showToast('Lỗi khi xóa món', 'error');
+        }
+    });
+}
+
+// Open Add Category Modal
+function openAddCategoryModal() {
+    document.getElementById('add-category-form').reset();
+    openModal('add-category-modal');
+}
+
+// Submit Add Category
+async function submitAddCategory(e) {
+    e.preventDefault();
+    const payload = {
+        name: document.getElementById('add-cat-name').value.trim(),
+        description: document.getElementById('add-cat-desc').value.trim()
+    };
+
+    try {
+        const res = await apiCall('/api/categories', 'POST', payload);
+        if (res.success) {
+            showToast('Tạo danh mục mới thành công!');
+            closeModal('add-category-modal');
+            categoriesList = await apiCall('/api/categories');
+            populateCategoryDropdowns();
+        } else {
+            showToast(res.message || 'Lỗi tạo danh mục', 'error');
+        }
+    } catch (e) {
+        showToast('Lỗi khi thêm danh mục', 'error');
+    }
+}
+
+// Reload Menu
+async function reloadMenu() {
+    fullMenuList = await apiCall('/api/menu');
+    filterMenuTable();
+}
+
+document.addEventListener('DOMContentLoaded', initMenuPage);
+</script>
+{% endblock %}

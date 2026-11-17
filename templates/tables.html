@@ -1,0 +1,392 @@
+{% extends "base.html" %}
+
+{% block page_title %}Sơ đồ & Quản lý bàn{% endblock %}
+{% block page_subtitle %}Theo dõi tình trạng bàn, gọi món và chuyển đổi trạng thái bàn theo thời gian thực{% endblock %}
+
+{% block topbar_action %}
+<button class="btn btn-primary btn-sm" onclick="openAddTableModal()">
+    <i class="fas fa-plus"></i> Thêm bàn mới
+</button>
+{% endblock %}
+
+{% block content %}
+<!-- Legend / Guide Bar -->
+<div style="display: flex; gap: 20px; align-items: center; margin-bottom: 24px; padding: 12px 18px; background: var(--bg-card); border-radius: var(--radius-md); border: 1px solid var(--border-subtle); flex-wrap: wrap;">
+    <span style="font-size: 13px; font-weight: 600; color: var(--text-secondary);">Trạng thái bàn:</span>
+    <div style="display: flex; align-items: center; gap: 8px;">
+        <span class="badge badge-success"><i class="fas fa-circle"></i> Trống (Sẵn sàng)</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 8px;">
+        <span class="badge badge-danger"><i class="fas fa-circle"></i> Đang có khách</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 8px;">
+        <span class="badge badge-warning"><i class="fas fa-circle"></i> Đã đặt trước</span>
+    </div>
+</div>
+
+<!-- Tables Grid -->
+<div class="tables-grid" id="tables-container">
+    <div style="grid-column: 1 / -1; text-align: center; color: var(--text-muted); padding: 50px;">
+        <i class="fas fa-spinner fa-spin fa-2x"></i>
+        <p style="margin-top: 10px;">Đang tải sơ đồ bàn...</p>
+    </div>
+</div>
+
+<!-- Modal: Thao tác trên bàn (Table Action Modal) -->
+<div id="table-action-modal" class="modal-backdrop">
+    <div class="modal-box" style="max-width: 440px;">
+        <div class="modal-header">
+            <h3 id="modal-table-title" style="color: var(--primary-gold);"><i class="fas fa-couch"></i> Chi tiết bàn</h3>
+            <button class="modal-close-btn" onclick="closeModal('table-action-modal')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div id="modal-table-info" style="margin-bottom: 18px; line-height: 1.6;">
+                <!-- Table Details Loaded Dynamically -->
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Thay đổi trạng thái bàn nhanh</label>
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">
+                    <button class="btn btn-sm btn-secondary" onclick="quickChangeStatus('empty')">
+                        <i class="fas fa-check" style="color: var(--success);"></i> Trống
+                    </button>
+                    <button class="btn btn-sm btn-secondary" onclick="quickChangeStatus('occupied')">
+                        <i class="fas fa-user-group" style="color: var(--danger);"></i> Có khách
+                    </button>
+                    <button class="btn btn-sm btn-secondary" onclick="quickChangeStatus('reserved')">
+                        <i class="fas fa-bookmark" style="color: var(--warning);"></i> Đã đặt
+                    </button>
+                </div>
+            </div>
+
+            <div id="modal-order-actions" style="margin-top: 20px; display: flex; flex-direction: column; gap: 10px;">
+                <!-- Go to POS or checkout buttons -->
+            </div>
+        </div>
+        <div class="modal-footer" style="justify-content: space-between;">
+            <button class="btn btn-danger btn-sm" onclick="confirmDeleteCurrentTable()">
+                <i class="fas fa-trash"></i> Xóa bàn
+            </button>
+            <div style="display: flex; gap: 8px;">
+                <button class="btn btn-secondary btn-sm" onclick="openEditTableModal()">Sửa bàn</button>
+                <button class="btn btn-primary btn-sm" onclick="closeModal('table-action-modal')">Đóng</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Thêm bàn mới (Add Table Modal) -->
+<div id="add-table-modal" class="modal-backdrop">
+    <div class="modal-box">
+        <div class="modal-header">
+            <h3 style="color: var(--primary-gold);"><i class="fas fa-plus-circle"></i> Thêm bàn mới</h3>
+            <button class="modal-close-btn" onclick="closeModal('add-table-modal')">&times;</button>
+        </div>
+        <form id="add-table-form" onsubmit="submitAddTable(event)">
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Tên / Số bàn *</label>
+                    <input type="text" id="add-table-number" class="form-control" placeholder="Ví dụ: Bàn 01, Bàn VIP 1, Bàn Ngoài Trời..." required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Sức chứa (Số ghế) *</label>
+                    <input type="number" id="add-table-capacity" class="form-control" value="4" min="1" max="100" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Trạng thái khởi tạo</label>
+                    <select id="add-table-status" class="form-select">
+                        <option value="empty">Trống (Sẵn sàng phục vụ)</option>
+                        <option value="reserved">Đã đặt trước</option>
+                        <option value="occupied">Có khách</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="closeModal('add-table-modal')">Hủy</button>
+                <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-save"></i> Lưu bàn</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal: Sửa bàn (Edit Table Modal) -->
+<div id="edit-table-modal" class="modal-backdrop">
+    <div class="modal-box">
+        <div class="modal-header">
+            <h3 style="color: var(--primary-gold);"><i class="fas fa-pen-to-square"></i> Cập nhật thông tin bàn</h3>
+            <button class="modal-close-btn" onclick="closeModal('edit-table-modal')">&times;</button>
+        </div>
+        <form id="edit-table-form" onsubmit="submitEditTable(event)">
+            <div class="modal-body">
+                <input type="hidden" id="edit-table-id">
+                <div class="form-group">
+                    <label class="form-label">Tên / Số bàn *</label>
+                    <input type="text" id="edit-table-number" class="form-control" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Sức chứa (Số ghế) *</label>
+                    <input type="number" id="edit-table-capacity" class="form-control" min="1" max="100" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Trạng thái</label>
+                    <select id="edit-table-status" class="form-select">
+                        <option value="empty">Trống</option>
+                        <option value="occupied">Có khách</option>
+                        <option value="reserved">Đã đặt</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="closeModal('edit-table-modal')">Hủy</button>
+                <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-check"></i> Cập nhật</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let allTablesList = [];
+let currentFloorFilter = 'all';
+let currentSelectedTable = null;
+
+// Initialize
+async function loadTables() {
+    try {
+        allTablesList = await apiCall('/api/tables');
+        renderTablesGrid();
+    } catch (e) {
+        console.error('Error loading tables:', e);
+    }
+}
+
+// Switch Floor Tab
+function switchFloor(floor, btn) {
+    currentFloorFilter = floor;
+    document.querySelectorAll('.floor-tab').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+    renderTablesGrid();
+}
+
+// Render Tables Grid
+function renderTablesGrid() {
+    const container = document.getElementById('tables-container');
+    const filtered = allTablesList;
+
+    if (filtered.length === 0) {
+        container.innerHTML = `
+            <div style="grid-column: 1 / -1; text-align: center; color: var(--text-muted); padding: 50px;">
+                <i class="fas fa-couch fa-2x" style="opacity: 0.3; margin-bottom: 10px;"></i>
+                <p>Chưa có bàn nào. Nhấn "Thêm bàn mới" để tạo bàn.</p>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = filtered.map(t => {
+        let statusBadge = '<span class="badge badge-success">Trống</span>';
+        let detailHtml = '<div class="table-card-time"><i class="fas fa-check"></i> Sẵn sàng phục vụ</div>';
+
+        if (t.status === 'occupied') {
+            statusBadge = '<span class="badge badge-danger">Có khách</span>';
+            const orderInfo = t.current_order;
+            if (orderInfo) {
+                detailHtml = `
+                    <div class="table-card-bill">${formatVND(orderInfo.total)}</div>
+                    <div class="table-card-time"><i class="far fa-clock"></i> Giờ vào: ${orderInfo.created_at} (${orderInfo.items_count} món)</div>
+                `;
+            } else {
+                detailHtml = `<div class="table-card-time"><i class="fas fa-user-check"></i> Đang phục vụ</div>`;
+            }
+        } else if (t.status === 'reserved') {
+            statusBadge = '<span class="badge badge-warning">Đã đặt</span>';
+            detailHtml = `<div class="table-card-time" style="color: var(--warning);"><i class="fas fa-bookmark"></i> Bàn đã giữ chỗ</div>`;
+        }
+
+        return `
+            <div class="table-card status-${t.status}" onclick="openTableDetails(${t.id})">
+                <div class="table-card-header">
+                    <span class="table-card-num">${t.number}</span>
+                    ${statusBadge}
+                </div>
+                <div class="table-card-details">
+                    ${detailHtml}
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px; border-top: 1px solid rgba(255, 255, 255, 0.05); padding-top: 8px;">
+                    <span class="table-card-capacity"><i class="fas fa-user"></i> ${t.capacity} chỗ</span>
+                    <span style="font-size: 11px; color: var(--primary-gold);"><i class="fas fa-circle-dot"></i> Hoạt động</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// Open Table Details Modal
+function openTableDetails(tableId) {
+    const table = allTablesList.find(t => t.id === tableId);
+    if (!table) return;
+
+    currentSelectedTable = table;
+    document.getElementById('modal-table-title').innerHTML = `<i class="fas fa-couch"></i> ${table.number}`;
+
+    let statusText = 'Trống (Sẵn sàng)';
+    if (table.status === 'occupied') statusText = 'Đang có khách ngồi';
+    if (table.status === 'reserved') statusText = 'Đã đặt trước';
+
+    let html = `
+        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+            <span style="color: var(--text-muted);">Trạng thái hiện tại:</span>
+            <strong>${statusText}</strong>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+            <span style="color: var(--text-muted);">Sức chứa:</span>
+            <span>${table.capacity} người</span>
+        </div>
+    `;
+
+    const actionsContainer = document.getElementById('modal-order-actions');
+    if (table.status === 'occupied' && table.current_order) {
+        html += `
+            <div style="background: var(--bg-surface); padding: 12px; border-radius: var(--radius-md); border: 1px solid var(--border-subtle); margin-top: 12px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                    <span style="color: var(--text-muted);">Mã đơn đang mở:</span>
+                    <strong style="color: var(--primary-gold);">#HD${String(table.current_order.id).padStart(5, '0')}</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                    <span style="color: var(--text-muted);">Tạm tính:</span>
+                    <strong style="font-size: 16px; color: var(--primary-gold);">${formatVND(table.current_order.total)}</strong>
+                </div>
+            </div>
+        `;
+        actionsContainer.innerHTML = `
+            <a href="/orders?table_id=${table.id}" class="btn btn-primary" style="width: 100%;">
+                <i class="fas fa-cash-register"></i> Đến quầy POS / Thanh toán đơn này
+            </a>
+        `;
+    } else {
+        actionsContainer.innerHTML = `
+            <a href="/orders?table_id=${table.id}" class="btn btn-primary" style="width: 100%;">
+                <i class="fas fa-plus"></i> Mở order mới cho bàn này (POS)
+            </a>
+        `;
+    }
+
+    document.getElementById('modal-table-info').innerHTML = html;
+    openModal('table-action-modal');
+}
+
+// Quick Change Status
+async function quickChangeStatus(newStatus) {
+    if (!currentSelectedTable) return;
+    try {
+        const res = await apiCall(`/api/tables/${currentSelectedTable.id}`, 'PUT', {
+            status: newStatus
+        });
+        if (res.success) {
+            showToast(`Đã chuyển trạng thái bàn ${currentSelectedTable.number}!`);
+            closeModal('table-action-modal');
+            loadTables();
+        } else {
+            showToast(res.message || 'Lỗi cập nhật trạng thái', 'error');
+        }
+    } catch (e) {
+        showToast('Lỗi khi cập nhật bàn', 'error');
+    }
+}
+
+// Open Add Table Modal
+function openAddTableModal() {
+    document.getElementById('add-table-form').reset();
+    openModal('add-table-modal');
+}
+
+// Submit Add Table
+async function submitAddTable(e) {
+    e.preventDefault();
+    const payload = {
+        number: document.getElementById('add-table-number').value.trim(),
+        floor: 1,
+        capacity: document.getElementById('add-table-capacity').value,
+        status: document.getElementById('add-table-status').value
+    };
+
+    try {
+        const res = await apiCall('/api/tables', 'POST', payload);
+        if (res.success) {
+            showToast('Thêm bàn mới thành công!');
+            closeModal('add-table-modal');
+            loadTables();
+        } else {
+            showToast(res.message || 'Không thể thêm bàn', 'error');
+        }
+    } catch (e) {
+        showToast('Lỗi khi thêm bàn', 'error');
+    }
+}
+
+// Open Edit Table Modal
+function openEditTableModal() {
+    if (!currentSelectedTable) return;
+    closeModal('table-action-modal');
+
+    document.getElementById('edit-table-id').value = currentSelectedTable.id;
+    document.getElementById('edit-table-number').value = currentSelectedTable.number;
+    document.getElementById('edit-table-capacity').value = currentSelectedTable.capacity;
+    document.getElementById('edit-table-status').value = currentSelectedTable.status;
+
+    openModal('edit-table-modal');
+}
+
+// Submit Edit Table
+async function submitEditTable(e) {
+    e.preventDefault();
+    const id = document.getElementById('edit-table-id').value;
+    const payload = {
+        number: document.getElementById('edit-table-number').value.trim(),
+        floor: currentSelectedTable.floor || 1,
+        capacity: document.getElementById('edit-table-capacity').value,
+        status: document.getElementById('edit-table-status').value
+    };
+
+    try {
+        const res = await apiCall(`/api/tables/${id}`, 'PUT', payload);
+        if (res.success) {
+            showToast('Cập nhật thông tin bàn thành công!');
+            closeModal('edit-table-modal');
+            loadTables();
+        } else {
+            showToast(res.message || 'Lỗi cập nhật', 'error');
+        }
+    } catch (e) {
+        showToast('Lỗi khi cập nhật bàn', 'error');
+    }
+}
+
+// Delete Table
+function confirmDeleteCurrentTable() {
+    if (!currentSelectedTable) return;
+    closeModal('table-action-modal');
+
+    showConfirm('Xác nhận xóa bàn', `Bạn có chắc chắn muốn xóa bàn "${currentSelectedTable.number}" vĩnh viễn?`, async () => {
+        try {
+            const res = await apiCall(`/api/tables/${currentSelectedTable.id}`, 'DELETE');
+            if (res.success) {
+                showToast('Đã xóa bàn thành công!');
+                loadTables();
+            } else {
+                showToast(res.message || 'Không thể xóa bàn!', 'error');
+            }
+        } catch (e) {
+            showToast('Lỗi khi xóa bàn', 'error');
+        }
+    });
+}
+
+document.addEventListener('DOMContentLoaded', loadTables);
+</script>
+{% endblock %}

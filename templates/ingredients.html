@@ -1,0 +1,454 @@
+{% extends "base.html" %}
+
+{% block page_title %}Quản lý Kho & Tồn kho Nguyên liệu{% endblock %}
+{% block page_subtitle %}Kiểm soát lượng tồn, định mức tối thiểu & cảnh báo thiếu hụt nguyên vật liệu pha chế{% endblock %}
+
+{% block topbar_action %}
+<button class="btn btn-primary btn-sm" onclick="openAddIngredientModal()">
+    <i class="fas fa-plus"></i> Thêm nguyên liệu mới
+</button>
+{% endblock %}
+
+{% block content %}
+<!-- Inventory Stats Cards -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-info">
+            <span>Tổng loại nguyên liệu</span>
+            <h3 id="stat-total-ing">0</h3>
+        </div>
+        <div class="stat-icon blue">
+            <i class="fas fa-boxes-stacked"></i>
+        </div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-info">
+            <span>Mặt hàng sắp hết</span>
+            <h3 id="stat-low-stock-ing" style="color: var(--danger);">0</h3>
+        </div>
+        <div class="stat-icon red">
+            <i class="fas fa-triangle-exclamation"></i>
+        </div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-info">
+            <span>Ước tính giá trị kho</span>
+            <h3 id="stat-stock-value" style="color: var(--primary-gold);">0 VND</h3>
+        </div>
+        <div class="stat-icon gold">
+            <i class="fas fa-warehouse"></i>
+        </div>
+    </div>
+</div>
+
+<!-- Low Stock Warning Banner -->
+<div id="low-stock-banner" style="display: none; margin-bottom: 24px; padding: 16px 20px; background: rgba(231, 76, 60, 0.12); border: 1px solid rgba(231, 76, 60, 0.35); border-radius: var(--radius-md); display: flex; align-items: center; justify-content: space-between;">
+    <div style="display: flex; align-items: center; gap: 14px;">
+        <i class="fas fa-triangle-exclamation fa-2x" style="color: var(--danger);"></i>
+        <div>
+            <h4 style="font-size: 14px; font-weight: 700; color: #ff7675; margin-bottom: 3px;">
+                Cảnh báo thiếu hụt nguyên vật liệu!
+            </h4>
+            <p style="font-size: 12px; margin: 0; color: var(--text-secondary);" id="low-stock-banner-text">
+                Có một số nguyên liệu đã chạm ngưỡng cảnh báo, cần đặt hàng bổ sung sớm.
+            </p>
+        </div>
+    </div>
+    <button class="btn btn-danger btn-sm" onclick="filterOnlyLowStock()">
+        <i class="fas fa-filter"></i> Xem danh sách sắp hết
+    </button>
+</div>
+
+<!-- Ingredients Table -->
+<div class="card">
+    <div class="card-header">
+        <div class="card-title">
+            <i class="fas fa-cubes-stacked"></i> Danh mục nguyên liệu trong kho
+        </div>
+        <div style="display: flex; gap: 10px;">
+            <input type="text" id="ing-search-input" class="form-control" placeholder="Tìm tên nguyên liệu hoặc nhà cung cấp..." style="width: 280px;" oninput="filterIngredientsTable()">
+            <button class="btn btn-secondary btn-sm" onclick="resetIngFilter()">Xem tất cả</button>
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Tên nguyên liệu</th>
+                    <th>Đơn vị</th>
+                    <th>Tồn kho hiện tại</th>
+                    <th>Ngưỡng tối thiểu</th>
+                    <th>Đơn giá nhập</th>
+                    <th>Nhà cung cấp</th>
+                    <th>Tình trạng</th>
+                    <th style="text-align: right;">Thao tác</th>
+                </tr>
+            </thead>
+            <tbody id="ingredients-tbody">
+                <tr>
+                    <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 30px;">
+                        <i class="fas fa-spinner fa-spin fa-2x"></i>
+                        <p style="margin-top: 10px;">Đang tải danh mục kho...</p>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal: Thêm nguyên liệu (Add Ingredient Modal) -->
+<div id="add-ing-modal" class="modal-backdrop">
+    <div class="modal-box">
+        <div class="modal-header">
+            <h3 style="color: var(--primary-gold);"><i class="fas fa-plus-circle"></i> Thêm nguyên liệu mới</h3>
+            <button class="modal-close-btn" onclick="closeModal('add-ing-modal')">&times;</button>
+        </div>
+        <form id="add-ing-form" onsubmit="submitAddIngredient(event)">
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Tên nguyên liệu *</label>
+                    <input type="text" id="add-ing-name" class="form-control" placeholder="Ví dụ: Cà phê Arabica, Sữa đặc..." required>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+                    <div class="form-group">
+                        <label class="form-label">Đơn vị tính *</label>
+                        <input type="text" id="add-ing-unit" class="form-control" placeholder="g, ml, kg, hộp, chai..." required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Số lượng ban đầu *</label>
+                        <input type="number" id="add-ing-qty" class="form-control" placeholder="0" min="0" step="any" required>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+                    <div class="form-group">
+                        <label class="form-label">Ngưỡng báo động tối thiểu *</label>
+                        <input type="number" id="add-ing-minqty" class="form-control" placeholder="Ví dụ: 10" min="0" step="any" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Giá vốn / đơn vị (VND)</label>
+                        <input type="number" id="add-ing-cost" class="form-control" placeholder="Ví dụ: 25000" min="0" step="100">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Nhà cung cấp / Nguồn nhập</label>
+                    <input type="text" id="add-ing-supplier" class="form-control" placeholder="Tên công ty, nông trại hoặc đại lý...">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="closeModal('add-ing-modal')">Hủy</button>
+                <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-save"></i> Lưu nguyên liệu</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal: Sửa nguyên liệu (Edit Ingredient Modal) -->
+<div id="edit-ing-modal" class="modal-backdrop">
+    <div class="modal-box">
+        <div class="modal-header">
+            <h3 style="color: var(--primary-gold);"><i class="fas fa-pen-to-square"></i> Cập nhật nguyên liệu</h3>
+            <button class="modal-close-btn" onclick="closeModal('edit-ing-modal')">&times;</button>
+        </div>
+        <form id="edit-ing-form" onsubmit="submitEditIngredient(event)">
+            <div class="modal-body">
+                <input type="hidden" id="edit-ing-id">
+                <div class="form-group">
+                    <label class="form-label">Tên nguyên liệu *</label>
+                    <input type="text" id="edit-ing-name" class="form-control" required>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+                    <div class="form-group">
+                        <label class="form-label">Đơn vị tính *</label>
+                        <input type="text" id="edit-ing-unit" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Tồn kho hiện có *</label>
+                        <input type="number" id="edit-ing-qty" class="form-control" min="0" step="any" required>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+                    <div class="form-group">
+                        <label class="form-label">Ngưỡng báo động tối thiểu *</label>
+                        <input type="number" id="edit-ing-minqty" class="form-control" min="0" step="any" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Giá vốn / đơn vị (VND)</label>
+                        <input type="number" id="edit-ing-cost" class="form-control" min="0" step="100">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Nhà cung cấp</label>
+                    <input type="text" id="edit-ing-supplier" class="form-control">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="closeModal('edit-ing-modal')">Hủy</button>
+                <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-check"></i> Cập nhật</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal: Nhập thêm kho nhanh (Quick Restock Modal) -->
+<div id="restock-modal" class="modal-backdrop">
+    <div class="modal-box" style="max-width: 400px;">
+        <div class="modal-header">
+            <h3 style="color: var(--primary-gold);"><i class="fas fa-truck-ramp-box"></i> Nhập thêm nguyên liệu</h3>
+            <button class="modal-close-btn" onclick="closeModal('restock-modal')">&times;</button>
+        </div>
+        <form id="restock-form" onsubmit="submitQuickRestock(event)">
+            <div class="modal-body">
+                <input type="hidden" id="restock-ing-id">
+                <p id="restock-ing-title" style="font-weight: 600; color: var(--text-primary); margin-bottom: 14px;"></p>
+                <div class="form-group">
+                    <label class="form-label">Số lượng nhập thêm (<span id="restock-unit-label"></span>) *</label>
+                    <input type="number" id="restock-add-qty" class="form-control" placeholder="Ví dụ: 10" min="0.1" step="any" required>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="closeModal('restock-modal')">Hủy</button>
+                <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-plus"></i> Xác nhận nhập kho</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let allIngredientsList = [];
+
+// Initialize
+async function loadIngredients() {
+    try {
+        allIngredientsList = await apiCall('/api/ingredients');
+        updateInventoryStats();
+        renderIngredientsTable(allIngredientsList);
+    } catch (e) {
+        console.error('Failed to load ingredients:', e);
+    }
+}
+
+// Update Header Stats
+function updateInventoryStats() {
+    const total = allIngredientsList.length;
+    const lowStockList = allIngredientsList.filter(i => i.is_low_stock);
+    const totalValue = allIngredientsList.reduce((sum, i) => sum + (i.quantity * i.cost_per_unit), 0);
+
+    document.getElementById('stat-total-ing').textContent = total + ' loại';
+    document.getElementById('stat-low-stock-ing').textContent = lowStockList.length + ' loại';
+    document.getElementById('stat-stock-value').textContent = formatVND(totalValue);
+
+    const banner = document.getElementById('low-stock-banner');
+    if (lowStockList.length > 0) {
+        banner.style.display = 'flex';
+        document.getElementById('low-stock-banner-text').textContent = 
+            `Có ${lowStockList.length} nguyên liệu (${lowStockList.map(i => i.name).slice(0, 3).join(', ')}${lowStockList.length > 3 ? '...' : ''}) sắp hết!`;
+    } else {
+        banner.style.display = 'none';
+    }
+}
+
+// Filter Table by Keyword
+function filterIngredientsTable() {
+    const keyword = document.getElementById('ing-search-input').value.trim().toLowerCase();
+    const filtered = allIngredientsList.filter(item => {
+        return (!keyword || item.name.toLowerCase().includes(keyword) || (item.supplier && item.supplier.toLowerCase().includes(keyword)));
+    });
+    renderIngredientsTable(filtered);
+}
+
+// Filter only low stock
+function filterOnlyLowStock() {
+    const filtered = allIngredientsList.filter(i => i.is_low_stock);
+    renderIngredientsTable(filtered);
+}
+
+// Reset filter
+function resetIngFilter() {
+    document.getElementById('ing-search-input').value = '';
+    renderIngredientsTable(allIngredientsList);
+}
+
+// Render Table
+function renderIngredientsTable(ingredients) {
+    const tbody = document.getElementById('ingredients-tbody');
+
+    if (ingredients.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 30px;">Không tìm thấy nguyên liệu phù hợp.</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = ingredients.map(ing => {
+        let statusBadge = '<span class="badge badge-success"><i class="fas fa-check"></i> Đầy đủ</span>';
+        let rowStyle = '';
+        if (ing.is_low_stock) {
+            statusBadge = '<span class="badge badge-danger"><i class="fas fa-triangle-exclamation"></i> Sắp hết</span>';
+            rowStyle = 'background: rgba(231, 76, 60, 0.05);';
+        }
+
+        return `
+            <tr style="${rowStyle}">
+                <td><strong>${ing.name}</strong></td>
+                <td><span class="badge badge-secondary">${ing.unit}</span></td>
+                <td>
+                    <strong style="${ing.is_low_stock ? 'color: var(--danger); font-size: 15px;' : 'color: var(--text-primary);'}">
+                        ${ing.quantity.toLocaleString('vi-VN')} ${ing.unit}
+                    </strong>
+                </td>
+                <td style="color: var(--text-muted);">${ing.min_quantity.toLocaleString('vi-VN')} ${ing.unit}</td>
+                <td>${formatVND(ing.cost_per_unit)} / ${ing.unit}</td>
+                <td>${ing.supplier || '—'}</td>
+                <td>${statusBadge}</td>
+                <td style="text-align: right;">
+                    <button class="btn btn-primary btn-sm" onclick="openRestockModal(${ing.id})" title="Nhập thêm hàng">
+                        <i class="fas fa-plus"></i> Nhập
+                    </button>
+                    <button class="btn btn-secondary btn-sm" onclick="openEditIngredientModal(${ing.id})" title="Chỉnh sửa">
+                        <i class="fas fa-pen"></i>
+                    </button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteIngredient(${ing.id}, '${ing.name}')" title="Xóa">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+// Open Quick Restock Modal
+function openRestockModal(id) {
+    const ing = allIngredientsList.find(i => i.id === id);
+    if (!ing) return;
+
+    document.getElementById('restock-ing-id').value = ing.id;
+    document.getElementById('restock-ing-title').textContent = `${ing.name} (Hiện có: ${ing.quantity} ${ing.unit})`;
+    document.getElementById('restock-unit-label').textContent = ing.unit;
+    document.getElementById('restock-add-qty').value = '';
+
+    openModal('restock-modal');
+}
+
+// Submit Quick Restock
+async function submitQuickRestock(e) {
+    e.preventDefault();
+    const id = document.getElementById('restock-ing-id').value;
+    const addQty = document.getElementById('restock-add-qty').value;
+
+    try {
+        const res = await apiCall(`/api/ingredients/${id}`, 'PUT', { add_quantity: addQty });
+        if (res.success) {
+            showToast('Đã nhập thêm hàng vào kho thành công!');
+            closeModal('restock-modal');
+            loadIngredients();
+        } else {
+            showToast(res.message || 'Lỗi nhập hàng', 'error');
+        }
+    } catch (e) {
+        showToast('Lỗi khi nhập kho', 'error');
+    }
+}
+
+// Open Add Ingredient Modal
+function openAddIngredientModal() {
+    document.getElementById('add-ing-form').reset();
+    openModal('add-ing-modal');
+}
+
+// Submit Add Ingredient
+async function submitAddIngredient(e) {
+    e.preventDefault();
+    const payload = {
+        name: document.getElementById('add-ing-name').value.trim(),
+        unit: document.getElementById('add-ing-unit').value.trim(),
+        quantity: document.getElementById('add-ing-qty').value,
+        min_quantity: document.getElementById('add-ing-minqty').value,
+        cost_per_unit: document.getElementById('add-ing-cost').value || 0,
+        supplier: document.getElementById('add-ing-supplier').value.trim()
+    };
+
+    try {
+        const res = await apiCall('/api/ingredients', 'POST', payload);
+        if (res.success) {
+            showToast('Thêm nguyên liệu mới thành công!');
+            closeModal('add-ing-modal');
+            loadIngredients();
+        } else {
+            showToast(res.message || 'Lỗi thêm nguyên liệu', 'error');
+        }
+    } catch (e) {
+        showToast('Lỗi khi thêm nguyên liệu', 'error');
+    }
+}
+
+// Open Edit Ingredient Modal
+function openEditIngredientModal(id) {
+    const ing = allIngredientsList.find(i => i.id === id);
+    if (!ing) return;
+
+    document.getElementById('edit-ing-id').value = ing.id;
+    document.getElementById('edit-ing-name').value = ing.name;
+    document.getElementById('edit-ing-unit').value = ing.unit;
+    document.getElementById('edit-ing-qty').value = ing.quantity;
+    document.getElementById('edit-ing-minqty').value = ing.min_quantity;
+    document.getElementById('edit-ing-cost').value = ing.cost_per_unit;
+    document.getElementById('edit-ing-supplier').value = ing.supplier || '';
+
+    openModal('edit-ing-modal');
+}
+
+// Submit Edit Ingredient
+async function submitEditIngredient(e) {
+    e.preventDefault();
+    const id = document.getElementById('edit-ing-id').value;
+    const payload = {
+        name: document.getElementById('edit-ing-name').value.trim(),
+        unit: document.getElementById('edit-ing-unit').value.trim(),
+        quantity: document.getElementById('edit-ing-qty').value,
+        min_quantity: document.getElementById('edit-ing-minqty').value,
+        cost_per_unit: document.getElementById('edit-ing-cost').value,
+        supplier: document.getElementById('edit-ing-supplier').value.trim()
+    };
+
+    try {
+        const res = await apiCall(`/api/ingredients/${id}`, 'PUT', payload);
+        if (res.success) {
+            showToast('Cập nhật nguyên liệu thành công!');
+            closeModal('edit-ing-modal');
+            loadIngredients();
+        } else {
+            showToast(res.message || 'Lỗi cập nhật', 'error');
+        }
+    } catch (e) {
+        showToast('Lỗi khi cập nhật nguyên liệu', 'error');
+    }
+}
+
+// Delete Ingredient
+function deleteIngredient(id, name) {
+    showConfirm('Xác nhận xóa nguyên liệu', `Bạn có chắc chắn muốn xóa "${name}" khỏi kho không?`, async () => {
+        try {
+            const res = await apiCall(`/api/ingredients/${id}`, 'DELETE');
+            if (res.success) {
+                showToast('Đã xóa nguyên liệu khỏi kho!');
+                loadIngredients();
+            } else {
+                showToast(res.message || 'Không thể xóa', 'error');
+            }
+        } catch (e) {
+            showToast('Lỗi khi xóa nguyên liệu', 'error');
+        }
+    });
+}
+
+document.addEventListener('DOMContentLoaded', loadIngredients);
+</script>
+{% endblock %}

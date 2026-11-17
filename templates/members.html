@@ -1,0 +1,388 @@
+{% extends "base.html" %}
+
+{% block page_title %}Thẻ Thành Viên{% endblock %}
+{% block page_subtitle %}Quản lý thành viên & hệ thống tích điểm{% endblock %}
+
+{% block topbar_action %}
+<button class="btn btn-primary btn-sm" onclick="openModal('modal-add-member')">
+    <i class="fas fa-user-plus"></i> Thêm thành viên
+</button>
+<button class="btn btn-secondary btn-sm" onclick="openModal('modal-settings')">
+    <i class="fas fa-sliders"></i> Cài đặt điểm
+</button>
+{% endblock %}
+
+{% block content %}
+
+<!-- Stats Row -->
+<div class="stats-grid" style="grid-template-columns: repeat(4, 1fr);">
+    <div class="stat-card">
+        <div class="stat-info"><span>Tổng thành viên</span><h3 id="stat-total">0</h3></div>
+        <div class="stat-icon gold"><i class="fas fa-users"></i></div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-info"><span>Thành viên Vàng+</span><h3 id="stat-gold">0</h3></div>
+        <div class="stat-icon" style="background:rgba(241,196,15,0.15);color:#f1c40f;"><i class="fas fa-star"></i></div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-info"><span>Tổng điểm đang lưu</span><h3 id="stat-points">0</h3></div>
+        <div class="stat-icon blue"><i class="fas fa-coins"></i></div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-info"><span>Tổng chi tiêu tích lũy</span><h3 id="stat-spent">0 VND</h3></div>
+        <div class="stat-icon green"><i class="fas fa-chart-line"></i></div>
+    </div>
+</div>
+
+<!-- Member Table Card -->
+<div class="card">
+    <div class="card-header">
+        <div class="card-title"><i class="fas fa-id-card"></i> Danh sách thành viên</div>
+        <div style="display:flex; gap:10px; align-items:center;">
+            <input type="text" id="search-input" class="form-control" style="width:220px;"
+                   placeholder="Tìm theo tên, SĐT, mã thẻ..." oninput="searchMembers(this.value)">
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Mã thẻ</th>
+                    <th>Họ tên</th>
+                    <th>Điện thoại</th>
+                    <th>Hạng thẻ</th>
+                    <th>Điểm hiện có</th>
+                    <th>Tổng chi tiêu</th>
+                    <th>Ngày tham gia</th>
+                    <th>Trạng thái</th>
+                    <th>Thao tác</th>
+                </tr>
+            </thead>
+            <tbody id="members-tbody">
+                <tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:28px;">
+                    <i class="fas fa-spinner fa-spin"></i> Đang tải...
+                </td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- ══ Modal: Add Member ══ -->
+<div class="modal-overlay" id="modal-add-member">
+    <div class="modal-box">
+        <div class="modal-header">
+            <h3><i class="fas fa-user-plus"></i> Thêm thành viên mới</h3>
+            <button class="modal-close" onclick="closeModal('modal-add-member')"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label>Họ và tên <span style="color:var(--danger)">*</span></label>
+                <input type="text" id="new-name" class="form-control" placeholder="Nguyễn Văn A">
+            </div>
+            <div class="form-group">
+                <label>Số điện thoại <span style="color:var(--danger)">*</span></label>
+                <input type="tel" id="new-phone" class="form-control" placeholder="0901234567">
+            </div>
+            <div class="form-group">
+                <label>Email</label>
+                <input type="email" id="new-email" class="form-control" placeholder="email@example.com">
+            </div>
+            <div class="form-group">
+                <label>Ghi chú</label>
+                <textarea id="new-notes" class="form-control" rows="2" placeholder="Ghi chú thêm..."></textarea>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeModal('modal-add-member')">Hủy</button>
+            <button class="btn btn-primary" onclick="addMember()"><i class="fas fa-save"></i> Tạo thẻ thành viên</button>
+        </div>
+    </div>
+</div>
+
+<!-- ══ Modal: Edit Member ══ -->
+<div class="modal-overlay" id="modal-edit-member">
+    <div class="modal-box">
+        <div class="modal-header">
+            <h3><i class="fas fa-user-edit"></i> Chỉnh sửa thành viên</h3>
+            <button class="modal-close" onclick="closeModal('modal-edit-member')"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+            <input type="hidden" id="edit-id">
+            <div class="form-group">
+                <label>Mã thẻ</label>
+                <input type="text" id="edit-code" class="form-control" readonly style="opacity:.6;">
+            </div>
+            <div class="form-group">
+                <label>Họ và tên</label>
+                <input type="text" id="edit-name" class="form-control">
+            </div>
+            <div class="form-group">
+                <label>Email</label>
+                <input type="email" id="edit-email" class="form-control">
+            </div>
+            <div class="form-group">
+                <label>Ghi chú</label>
+                <textarea id="edit-notes" class="form-control" rows="2"></textarea>
+            </div>
+            <div class="form-group">
+                <label>Trạng thái</label>
+                <select id="edit-active" class="form-control">
+                    <option value="1">Hoạt động</option>
+                    <option value="0">Tạm khóa</option>
+                </select>
+            </div>
+            <hr style="border-color:var(--border-subtle);margin:16px 0;">
+            <p style="font-size:13px;color:var(--text-muted);margin-bottom:10px;">Điều chỉnh điểm thủ công:</p>
+            <div style="display:flex;gap:10px;align-items:flex-end;">
+                <div class="form-group" style="flex:1;margin-bottom:0;">
+                    <label>Số điểm (+ hoặc -)</label>
+                    <input type="number" id="adj-points" class="form-control" placeholder="VD: 50 hoặc -20">
+                </div>
+                <div class="form-group" style="flex:1.5;margin-bottom:0;">
+                    <label>Lý do</label>
+                    <input type="text" id="adj-reason" class="form-control" placeholder="Lý do điều chỉnh">
+                </div>
+                <button class="btn btn-secondary" onclick="adjustPoints()" style="margin-bottom:1px;">
+                    <i class="fas fa-wand-magic-sparkles"></i> Điều chỉnh
+                </button>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeModal('modal-edit-member')">Đóng</button>
+            <button class="btn btn-primary" onclick="saveMember()"><i class="fas fa-save"></i> Lưu thay đổi</button>
+        </div>
+    </div>
+</div>
+
+<!-- ══ Modal: Transaction History ══ -->
+<div class="modal-overlay" id="modal-history">
+    <div class="modal-box" style="max-width:580px;">
+        <div class="modal-header">
+            <h3><i class="fas fa-history"></i> Lịch sử điểm – <span id="hist-name"></span></h3>
+            <button class="modal-close" onclick="closeModal('modal-history')"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body" style="max-height:400px;overflow-y:auto;">
+            <table class="table" style="font-size:13px;">
+                <thead><tr><th>Ngày</th><th>Loại</th><th>Điểm</th><th>Mô tả</th></tr></thead>
+                <tbody id="txn-tbody"></tbody>
+            </table>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeModal('modal-history')">Đóng</button>
+        </div>
+    </div>
+</div>
+
+<!-- ══ Modal: Point Settings (Admin) ══ -->
+<div class="modal-overlay" id="modal-settings">
+    <div class="modal-box" style="max-width:500px;">
+        <div class="modal-header">
+            <h3><i class="fas fa-sliders"></i> Cài đặt tích điểm</h3>
+            <button class="modal-close" onclick="closeModal('modal-settings')"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label>Điểm tích lũy cho mỗi 1,000 VND</label>
+                <input type="number" id="set-rate" class="form-control" step="0.001" min="0" placeholder="1 = 1 điểm / 1.000 VND">
+                <small style="color:var(--text-muted);">
+                    Ví dụ: 1 = cứ 1.000 VND được 1 điểm. 0.5 = cứ 2.000 VND được 1 điểm.
+                </small>
+            </div>
+            <div class="form-group">
+                <label>Đơn tối thiểu để tích điểm (VND)</label>
+                <input type="number" id="set-min-order" class="form-control" min="0" placeholder="0 = không giới hạn">
+            </div>
+            <div class="form-group">
+                <label>Giá trị quy đổi 1 điểm (VND)</label>
+                <input type="number" id="set-p2v" class="form-control" min="0" placeholder="1000 = 1 điểm = 1.000 VND">
+            </div>
+            <div class="form-group">
+                <label>Điểm tối thiểu để đổi thưởng</label>
+                <input type="number" id="set-min-redeem" class="form-control" min="0" placeholder="10">
+            </div>
+            <div class="card" style="background:var(--bg-surface);padding:12px 16px;margin-top:8px;">
+                <small style="color:var(--primary-gold);font-weight:600;display:block;margin-bottom:6px;">
+                    <i class="fas fa-crown"></i> Hạng thẻ tự động
+                </small>
+                <div style="font-size:12px;color:var(--text-muted);line-height:2;">
+                    🥉 Đồng: Dưới 2.000.000 VND<br>
+                    🥈 Bạc: 2.000.000 – 4.999.999 VND<br>
+                    🥇 Vàng: 5.000.000 – 9.999.999 VND<br>
+                    💎 Kim Cương: Từ 10.000.000 VND trở lên
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeModal('modal-settings')">Hủy</button>
+            <button class="btn btn-primary" onclick="saveSettings()"><i class="fas fa-save"></i> Lưu cài đặt</button>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let allMembers = [];
+
+const levelColors = { 'Đồng': '#cd7f32', 'Bạc': '#a8a9ad', 'Vàng': '#f1c40f', 'Kim Cương': '#3498db' };
+const levelIcons  = { 'Đồng': '🥉', 'Bạc': '🥈', 'Vàng': '🥇', 'Kim Cương': '💎' };
+
+async function loadMembers() {
+    const data = await apiCall('/api/members');
+    allMembers = Array.isArray(data) ? data : [];
+    renderTable(allMembers);
+    updateStats(allMembers);
+}
+
+function updateStats(members) {
+    document.getElementById('stat-total').textContent = members.length;
+    document.getElementById('stat-gold').textContent = members.filter(m => ['Vàng','Kim Cương'].includes(m.level)).length;
+    document.getElementById('stat-points').textContent = members.reduce((s,m) => s + m.points, 0).toLocaleString('vi-VN') + ' điểm';
+    document.getElementById('stat-spent').textContent = formatVND(members.reduce((s,m) => s + m.total_spent, 0));
+}
+
+function renderTable(members) {
+    const tbody = document.getElementById('members-tbody');
+    if (!members.length) {
+        tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:28px;">Chưa có thành viên nào.</td></tr>`;
+        return;
+    }
+    tbody.innerHTML = members.map(m => {
+        const color = levelColors[m.level] || '#c8a97e';
+        const icon  = levelIcons[m.level] || '';
+        const badge = m.active
+            ? '<span class="badge badge-success">Hoạt động</span>'
+            : '<span class="badge badge-danger">Tạm khóa</span>';
+        return `<tr>
+            <td><code style="color:var(--primary-gold);font-size:13px;">${m.card_code}</code></td>
+            <td><strong>${m.name}</strong></td>
+            <td>${m.phone}</td>
+            <td><span style="color:${color};font-weight:700;">${icon} ${m.level}</span></td>
+            <td><strong style="color:var(--primary-gold);">${m.points.toLocaleString('vi-VN')}</strong> điểm</td>
+            <td>${formatVND(m.total_spent)}</td>
+            <td>${m.joined_at}</td>
+            <td>${badge}</td>
+            <td style="display:flex;gap:6px;">
+                <button class="btn btn-secondary btn-sm" onclick="openEdit(${m.id})" title="Chỉnh sửa"><i class="fas fa-edit"></i></button>
+                <button class="btn btn-secondary btn-sm" onclick="openHistory(${m.id}, '${m.name}')" title="Lịch sử điểm"><i class="fas fa-history"></i></button>
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+function searchMembers(q) {
+    q = q.toLowerCase();
+    renderTable(q ? allMembers.filter(m =>
+        m.name.toLowerCase().includes(q) || m.phone.includes(q) || m.card_code.toLowerCase().includes(q)
+    ) : allMembers);
+}
+
+async function addMember() {
+    const name  = document.getElementById('new-name').value.trim();
+    const phone = document.getElementById('new-phone').value.trim();
+    const email = document.getElementById('new-email').value.trim();
+    const notes = document.getElementById('new-notes').value.trim();
+    if (!name || !phone) { showToast('Vui lòng nhập họ tên và số điện thoại!', 'warning'); return; }
+    const res = await apiCall('/api/members', 'POST', { name, phone, email, notes });
+    if (res.success) {
+        showToast(res.message, 'success');
+        closeModal('modal-add-member');
+        document.getElementById('new-name').value = '';
+        document.getElementById('new-phone').value = '';
+        document.getElementById('new-email').value = '';
+        document.getElementById('new-notes').value = '';
+        loadMembers();
+    } else {
+        showToast(res.message || 'Lỗi tạo thành viên!', 'error');
+    }
+}
+
+async function openEdit(id) {
+    const res = await apiCall(`/api/members/${id}`);
+    if (!res.success) { showToast('Lỗi tải thông tin thành viên!', 'error'); return; }
+    const m = res.member;
+    document.getElementById('edit-id').value     = m.id;
+    document.getElementById('edit-code').value   = m.card_code;
+    document.getElementById('edit-name').value   = m.name;
+    document.getElementById('edit-email').value  = m.email;
+    document.getElementById('edit-notes').value  = m.notes;
+    document.getElementById('edit-active').value = m.active ? '1' : '0';
+    document.getElementById('adj-points').value  = '';
+    document.getElementById('adj-reason').value  = '';
+    openModal('modal-edit-member');
+}
+
+async function saveMember() {
+    const id = document.getElementById('edit-id').value;
+    const res = await apiCall(`/api/members/${id}`, 'PUT', {
+        name:   document.getElementById('edit-name').value.trim(),
+        email:  document.getElementById('edit-email').value.trim(),
+        notes:  document.getElementById('edit-notes').value.trim(),
+        active: document.getElementById('edit-active').value === '1'
+    });
+    if (res.success) { showToast(res.message, 'success'); closeModal('modal-edit-member'); loadMembers(); }
+    else showToast(res.message || 'Lỗi cập nhật!', 'error');
+}
+
+async function adjustPoints() {
+    const id     = document.getElementById('edit-id').value;
+    const pts    = parseInt(document.getElementById('adj-points').value);
+    const reason = document.getElementById('adj-reason').value.trim();
+    if (!pts || isNaN(pts)) { showToast('Vui lòng nhập số điểm cần điều chỉnh!', 'warning'); return; }
+    const res = await apiCall(`/api/members/${id}/adjust-points`, 'POST', {
+        points: pts, reason: reason || 'Điều chỉnh thủ công', type: 'adjust'
+    });
+    if (res.success) { showToast(res.message, 'success'); document.getElementById('adj-points').value = ''; document.getElementById('adj-reason').value = ''; loadMembers(); }
+    else showToast(res.message || 'Lỗi điều chỉnh điểm!', 'error');
+}
+
+async function openHistory(id, name) {
+    document.getElementById('hist-name').textContent = name;
+    const res = await apiCall(`/api/members/${id}`);
+    const tbody = document.getElementById('txn-tbody');
+    if (!res.success || !res.transactions.length) {
+        tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:16px;">Chưa có giao dịch nào.</td></tr>`;
+    } else {
+        const typeMap = { earn: '<span class="badge badge-success">Tích điểm</span>', redeem: '<span class="badge badge-warning">Đổi điểm</span>', adjust: '<span class="badge badge-info">Điều chỉnh</span>' };
+        tbody.innerHTML = res.transactions.map(t => `
+            <tr>
+                <td>${t.created_at.substring(0,16)}</td>
+                <td>${typeMap[t.type] || t.type}</td>
+                <td style="color:${t.points >= 0 ? 'var(--success)' : 'var(--danger)'}; font-weight:700;">${t.points >= 0 ? '+' : ''}${t.points}</td>
+                <td>${t.description}</td>
+            </tr>
+        `).join('');
+    }
+    openModal('modal-history');
+}
+
+async function loadSettings() {
+    const res = await apiCall('/api/point-settings');
+    if (res.success) {
+        const s = res.settings;
+        document.getElementById('set-rate').value        = s.points_per_vnd * 1000; // display per 1000 VND
+        document.getElementById('set-min-order').value   = s.min_order_to_earn;
+        document.getElementById('set-p2v').value         = s.points_to_vnd;
+        document.getElementById('set-min-redeem').value  = s.min_points_redeem;
+    }
+}
+
+async function saveSettings() {
+    const rateDisplay = parseFloat(document.getElementById('set-rate').value);
+    const res = await apiCall('/api/point-settings', 'PUT', {
+        points_per_vnd:    rateDisplay / 1000,  // convert back to per-VND
+        min_order_to_earn: parseFloat(document.getElementById('set-min-order').value) || 0,
+        points_to_vnd:     parseFloat(document.getElementById('set-p2v').value) || 1000,
+        min_points_redeem: parseInt(document.getElementById('set-min-redeem').value) || 10
+    });
+    if (res.success) { showToast(res.message, 'success'); closeModal('modal-settings'); }
+    else showToast(res.message || 'Lỗi lưu cài đặt!', 'error');
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    loadMembers();
+    loadSettings();
+});
+</script>
+{% endblock %}

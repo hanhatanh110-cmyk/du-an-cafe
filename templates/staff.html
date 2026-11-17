@@ -1,0 +1,330 @@
+{% extends "base.html" %}
+
+{% block page_title %}Quản lý Nhân sự{% endblock %}
+{% block page_subtitle %}Danh sách nhân viên, phân quyền vai trò (Admin / Thu ngân / Phục vụ) & lương thưởng{% endblock %}
+
+{% block topbar_action %}
+<button class="btn btn-primary btn-sm" onclick="openAddStaffModal()">
+    <i class="fas fa-user-plus"></i> Thêm nhân viên mới
+</button>
+{% endblock %}
+
+{% block content %}
+<!-- Staff Table Card -->
+<div class="card">
+    <div class="card-header">
+        <div class="card-title">
+            <i class="fas fa-users-gear"></i> Danh sách đội ngũ nhân viên (<span id="staff-count">0</span> người)
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Họ và tên</th>
+                    <th>Vai trò / Chức vụ</th>
+                    <th>Số điện thoại</th>
+                    <th>Email</th>
+                    <th>Mức lương</th>
+                    <th>Ngày vào làm</th>
+                    <th>Trạng thái</th>
+                    <th style="text-align: right;">Thao tác</th>
+                </tr>
+            </thead>
+            <tbody id="staff-tbody">
+                <tr>
+                    <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 30px;">
+                        <i class="fas fa-spinner fa-spin fa-2x"></i>
+                        <p style="margin-top: 10px;">Đang tải danh sách nhân sự...</p>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal: Thêm nhân viên (Add Staff Modal) -->
+<div id="add-staff-modal" class="modal-backdrop">
+    <div class="modal-box">
+        <div class="modal-header">
+            <h3 style="color: var(--primary-gold);"><i class="fas fa-user-plus"></i> Thêm nhân viên mới</h3>
+            <button class="modal-close-btn" onclick="closeModal('add-staff-modal')">&times;</button>
+        </div>
+        <form id="add-staff-form" onsubmit="submitAddStaff(event)">
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Họ và tên *</label>
+                    <input type="text" id="add-staff-name" class="form-control" placeholder="Ví dụ: Nguyễn Văn An" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Vai trò / Chức vụ *</label>
+                    <select id="add-staff-role" class="form-select" required>
+                        <option value="waiter">Phục vụ bàn (Waiter)</option>
+                        <option value="cashier">Thu ngân (Cashier)</option>
+                        <option value="admin">Quản lý / Giám sát (Admin)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Số điện thoại</label>
+                    <input type="tel" id="add-staff-phone" class="form-control" placeholder="Ví dụ: 0901234567">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Email</label>
+                    <input type="email" id="add-staff-email" class="form-control" placeholder="Ví dụ: an.nguyen@cafeantigravity.vn">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Mức lương cơ bản (VND)</label>
+                    <input type="number" id="add-staff-salary" class="form-control" placeholder="Nhập lương (VND), ví dụ: 5000000 hoặc 25000/giờ" min="0" step="1">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Ngày vào làm</label>
+                    <input type="date" id="add-staff-hiredate" class="form-control">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="closeModal('add-staff-modal')">Hủy</button>
+                <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-save"></i> Thêm nhân viên</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal: Sửa nhân viên (Edit Staff Modal) -->
+<div id="edit-staff-modal" class="modal-backdrop">
+    <div class="modal-box">
+        <div class="modal-header">
+            <h3 style="color: var(--primary-gold);"><i class="fas fa-user-pen"></i> Cập nhật hồ sơ nhân viên</h3>
+            <button class="modal-close-btn" onclick="closeModal('edit-staff-modal')">&times;</button>
+        </div>
+        <form id="edit-staff-form" onsubmit="submitEditStaff(event)">
+            <div class="modal-body">
+                <input type="hidden" id="edit-staff-id">
+                <div class="form-group">
+                    <label class="form-label">Họ và tên *</label>
+                    <input type="text" id="edit-staff-name" class="form-control" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Vai trò / Chức vụ *</label>
+                    <select id="edit-staff-role" class="form-select" required>
+                        <option value="waiter">Phục vụ bàn (Waiter)</option>
+                        <option value="cashier">Thu ngân (Cashier)</option>
+                        <option value="admin">Quản lý / Giám sát (Admin)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Số điện thoại</label>
+                    <input type="tel" id="edit-staff-phone" class="form-control">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Email</label>
+                    <input type="email" id="edit-staff-email" class="form-control">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Mức lương cơ bản (VND)</label>
+                    <input type="number" id="edit-staff-salary" class="form-control" placeholder="Nhập lương (VND)" min="0" step="1">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Ngày vào làm</label>
+                    <input type="date" id="edit-staff-hiredate" class="form-control">
+                </div>
+
+                <div class="form-group">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-primary); font-size: 13px;">
+                        <input type="checkbox" id="edit-staff-active" style="width: 16px; height: 16px; accent-color: var(--primary-gold);">
+                        Đang làm việc (Kích hoạt tài khoản)
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="closeModal('edit-staff-modal')">Hủy</button>
+                <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-check"></i> Cập nhật</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let fullStaffList = [];
+
+// Initialize
+async function loadStaff() {
+    try {
+        fullStaffList = await apiCall('/api/staff');
+        renderStaffTable(fullStaffList);
+    } catch (e) {
+        console.error('Failed to load staff:', e);
+    }
+}
+
+// Render Staff Table
+function renderStaffTable(staffList) {
+    const tbody = document.getElementById('staff-tbody');
+    document.getElementById('staff-count').textContent = staffList.length;
+
+    if (staffList.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 30px;">Chưa có dữ liệu nhân viên.</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = staffList.map(s => {
+        let roleBadge = '<span class="badge badge-info"><i class="fas fa-person"></i> Phục vụ</span>';
+        if (s.role === 'admin') roleBadge = '<span class="badge badge-gold"><i class="fas fa-shield"></i> Quản lý</span>';
+        if (s.role === 'cashier') roleBadge = '<span class="badge badge-warning"><i class="fas fa-calculator"></i> Thu ngân</span>';
+
+        return `
+            <tr style="${!s.active ? 'opacity: 0.55;' : ''}">
+                <td><strong>${s.name}</strong></td>
+                <td>${roleBadge}</td>
+                <td>${s.phone || '—'}</td>
+                <td>${s.email || '—'}</td>
+                <td><strong style="color: var(--primary-gold);">${formatVND(s.salary)}</strong></td>
+                <td>${s.hire_date || '—'}</td>
+                <td>
+                    ${s.active 
+                        ? '<span class="badge badge-success"><i class="fas fa-circle"></i> Đang làm việc</span>' 
+                        : '<span class="badge badge-danger"><i class="fas fa-ban"></i> Đã nghỉ việc</span>'}
+                </td>
+                <td style="text-align: right;">
+                    <button class="btn btn-secondary btn-sm" onclick="openEditStaffModal(${s.id})" title="Chỉnh sửa">
+                        <i class="fas fa-pen"></i>
+                    </button>
+                    ${s.active ? `
+                    <button class="btn btn-danger btn-sm" onclick="deactivateStaff(${s.id}, '${s.name}')" title="Vô hiệu hóa">
+                        <i class="fas fa-user-slash"></i>
+                    </button>
+                    ` : `
+                    <button class="btn btn-success btn-sm" onclick="reactivateStaff(${s.id})" title="Kích hoạt lại">
+                        <i class="fas fa-user-check"></i>
+                    </button>
+                    `}
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+// Open Add Staff Modal
+function openAddStaffModal() {
+    document.getElementById('add-staff-form').reset();
+    document.getElementById('add-staff-hiredate').value = new Date().toISOString().split('T')[0];
+    openModal('add-staff-modal');
+}
+
+// Submit Add Staff
+async function submitAddStaff(e) {
+    e.preventDefault();
+    const payload = {
+        name: document.getElementById('add-staff-name').value.trim(),
+        role: document.getElementById('add-staff-role').value,
+        phone: document.getElementById('add-staff-phone').value.trim(),
+        email: document.getElementById('add-staff-email').value.trim(),
+        salary: document.getElementById('add-staff-salary').value || 0,
+        hire_date: document.getElementById('add-staff-hiredate').value
+    };
+
+    try {
+        const res = await apiCall('/api/staff', 'POST', payload);
+        if (res.success) {
+            showToast('Thêm nhân viên mới thành công!');
+            closeModal('add-staff-modal');
+            loadStaff();
+        } else {
+            showToast(res.message || 'Lỗi thêm nhân viên', 'error');
+        }
+    } catch (e) {
+        showToast('Lỗi khi thêm nhân viên', 'error');
+    }
+}
+
+// Open Edit Staff Modal
+function openEditStaffModal(id) {
+    const staff = fullStaffList.find(s => s.id === id);
+    if (!staff) return;
+
+    document.getElementById('edit-staff-id').value = staff.id;
+    document.getElementById('edit-staff-name').value = staff.name;
+    document.getElementById('edit-staff-role').value = staff.role;
+    document.getElementById('edit-staff-phone').value = staff.phone || '';
+    document.getElementById('edit-staff-email').value = staff.email || '';
+    document.getElementById('edit-staff-salary').value = staff.salary || 0;
+    document.getElementById('edit-staff-hiredate').value = staff.hire_date || '';
+    document.getElementById('edit-staff-active').checked = staff.active;
+
+    openModal('edit-staff-modal');
+}
+
+// Submit Edit Staff
+async function submitEditStaff(e) {
+    e.preventDefault();
+    const id = document.getElementById('edit-staff-id').value;
+    const payload = {
+        name: document.getElementById('edit-staff-name').value.trim(),
+        role: document.getElementById('edit-staff-role').value,
+        phone: document.getElementById('edit-staff-phone').value.trim(),
+        email: document.getElementById('edit-staff-email').value.trim(),
+        salary: document.getElementById('edit-staff-salary').value || 0,
+        hire_date: document.getElementById('edit-staff-hiredate').value,
+        active: document.getElementById('edit-staff-active').checked
+    };
+
+    try {
+        const res = await apiCall(`/api/staff/${id}`, 'PUT', payload);
+        if (res.success) {
+            showToast('Cập nhật nhân viên thành công!');
+            closeModal('edit-staff-modal');
+            loadStaff();
+        } else {
+            showToast(res.message || 'Lỗi cập nhật', 'error');
+        }
+    } catch (e) {
+        showToast('Lỗi khi cập nhật hồ sơ', 'error');
+    }
+}
+
+// Deactivate Staff
+function deactivateStaff(id, name) {
+    showConfirm('Vô hiệu hóa nhân sự', `Bạn có chắc chắn muốn ngưng hoạt động của nhân viên "${name}"?`, async () => {
+        try {
+            const res = await apiCall(`/api/staff/${id}`, 'DELETE');
+            if (res.success) {
+                showToast('Đã vô hiệu hóa nhân viên!');
+                loadStaff();
+            } else {
+                showToast(res.message || 'Lỗi xử lý', 'error');
+            }
+        } catch (e) {
+            showToast('Lỗi khi vô hiệu hóa nhân viên', 'error');
+        }
+    });
+}
+
+// Reactivate Staff
+async function reactivateStaff(id) {
+    try {
+        const res = await apiCall(`/api/staff/${id}`, 'PUT', { active: true });
+        if (res.success) {
+            showToast('Đã kích hoạt lại nhân viên thành công!');
+            loadStaff();
+        } else {
+            showToast(res.message || 'Lỗi kích hoạt', 'error');
+        }
+    } catch (e) {
+        showToast('Lỗi khi kích hoạt nhân viên', 'error');
+    }
+}
+
+document.addEventListener('DOMContentLoaded', loadStaff);
+</script>
+{% endblock %}

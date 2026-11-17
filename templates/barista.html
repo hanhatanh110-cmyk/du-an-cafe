@@ -1,0 +1,613 @@
+{% extends "base.html" %}
+{% block page_title %}Màn hình Pha chế (KDS / Barista){% endblock %}
+{% block page_subtitle %}Hàng đợi chế biến đồ uống &amp; theo dõi đơn hàng thời gian thực{% endblock %}
+
+{% block topbar_action %}
+<div style="display:flex;gap:10px;align-items:center;">
+    <div style="font-size:12px;color:var(--text-secondary);background:var(--bg-surface);padding:6px 12px;border-radius:var(--radius-sm);border:1px solid var(--border-subtle);display:flex;align-items:center;gap:6px;">
+        <i class="fas fa-arrows-rotate fa-spin" id="refresh-spinner" style="display:none;color:var(--primary-gold);"></i>
+        <span>Tự làm mới sau: <strong id="refresh-timer" style="color:var(--primary-gold);">30</strong>s</span>
+        <button onclick="toggleAutoRefresh()" id="btn-pause-refresh" title="Tạm dừng/Tiếp tục" style="background:none;border:none;color:var(--text-muted);cursor:pointer;margin-left:4px;">
+            <i class="fas fa-pause"></i>
+        </button>
+    </div>
+    <button class="btn btn-secondary btn-sm" onclick="loadBaristaQueue(true)">
+        <i class="fas fa-sync-alt"></i> Làm mới
+    </button>
+    <button class="btn btn-secondary btn-sm" id="btn-sound-toggle" onclick="toggleSound()" title="Bật/Tắt chuông báo đơn mới">
+        <i class="fas fa-volume-high" id="sound-icon"></i>
+    </button>
+</div>
+{% endblock %}
+
+{% block content %}
+<!-- Audio Notification Status Alert -->
+<div id="new-order-alert" style="display:none;background:linear-gradient(90deg, #c8a97e22, #c8a97e44);border:1px solid var(--primary-gold);border-radius:var(--radius-md);padding:12px 20px;margin-bottom:16px;align-items:center;justify-content:space-between;">
+    <div style="display:flex;align-items:center;gap:12px;color:var(--primary-gold);">
+        <i class="fas fa-bell fa-shake fa-lg"></i>
+        <strong>CÓ ĐƠN HÀNG MỚI!</strong>
+        <span id="new-order-msg" style="color:var(--text-primary);font-size:13px;"></span>
+    </div>
+    <button class="btn btn-primary btn-sm" onclick="dismissAlert()">Đã xem</button>
+</div>
+
+<!-- Controls: Category Filters & Batch Actions -->
+<div class="card" style="margin-bottom:20px;padding:16px 20px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;">
+        <!-- Category Filter Pills -->
+        <div id="category-pills" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <button class="cat-pill active" onclick="setCategoryFilter('all')">Tất cả (<span id="count-all">0</span>)</button>
+            <!-- Generated dynamically -->
+        </div>
+
+        <!-- View Mode Switcher -->
+        <div style="display:flex;gap:8px;align-items:center;">
+            <span style="font-size:12px;color:var(--text-muted);">Hiển thị:</span>
+            <div style="display:flex;background:var(--bg-surface);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);overflow:hidden;">
+                <button class="view-btn active" id="view-by-table" onclick="setViewMode('table')">
+                    <i class="fas fa-table-cells-large"></i> Theo bàn
+                </button>
+                <button class="view-btn" id="view-by-item" onclick="setViewMode('item')">
+                    <i class="fas fa-layer-group"></i> Gộp món
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Batch Action Toolbar (When items selected) -->
+<div id="batch-toolbar" style="display:none;background:var(--bg-card);border:1px solid var(--primary-gold);border-radius:var(--radius-md);padding:12px 20px;margin-bottom:20px;display:none;align-items:center;justify-content:space-between;box-shadow:var(--shadow-md);">
+    <div style="display:flex;align-items:center;gap:12px;">
+        <i class="fas fa-check-double" style="color:var(--primary-gold);"></i>
+        <span>Đã chọn <strong id="selected-items-count" style="color:var(--primary-gold);">0</strong> món cần pha chế</span>
+    </div>
+    <div style="display:flex;gap:10px;">
+        <button class="btn btn-secondary btn-sm" onclick="clearSelectedItems()">Hủy chọn</button>
+        <button class="btn btn-primary btn-sm" onclick="completeSelectedItems()">
+            <i class="fas fa-check"></i> Đánh dấu hoàn thành
+        </button>
+    </div>
+</div>
+
+<!-- Main Views Container -->
+<div id="barista-container">
+    <!-- View 1: By Table / Order Cards Grid -->
+    <div id="table-view-grid" style="display:grid;grid-template-columns:repeat(auto-fill, minmax(320px, 1fr));gap:20px;"></div>
+
+    <!-- View 2: Aggregated Items View -->
+    <div id="item-view-grid" style="display:none;grid-template-columns:repeat(auto-fill, minmax(280px, 1fr));gap:16px;"></div>
+</div>
+
+<!-- Empty Queue Message -->
+<div id="empty-queue" style="display:none;text-align:center;padding:60px 20px;background:var(--bg-card);border-radius:var(--radius-lg);border:1px solid var(--border-subtle);">
+    <div style="width:70px;height:70px;border-radius:50%;background:rgba(46,204,113,0.15);display:inline-flex;align-items:center;justify-content:center;color:var(--success);font-size:32px;margin-bottom:16px;">
+        <i class="fas fa-check"></i>
+    </div>
+    <h3 style="font-size:18px;font-weight:700;margin-bottom:6px;">Hiện không có món nào đang chờ pha chế!</h3>
+    <p style="color:var(--text-muted);font-size:13px;">Mọi đồ uống đã được hoàn tất hoặc chưa có đơn hàng mới.</p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+.cat-pill {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+    padding: 6px 14px;
+    border-radius: var(--radius-full);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: var(--transition);
+}
+.cat-pill:hover {
+    color: var(--text-primary);
+    border-color: var(--primary-gold);
+}
+.cat-pill.active {
+    background: var(--primary-gold);
+    color: #121316;
+    border-color: var(--primary-gold);
+    font-weight: 700;
+}
+.view-btn {
+    background: transparent;
+    border: none;
+    padding: 7px 14px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: var(--transition);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.view-btn.active {
+    background: var(--primary-gold);
+    color: #121316;
+    font-weight: 600;
+}
+.barista-order-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: var(--shadow-sm);
+    transition: var(--transition);
+}
+.barista-order-card:hover {
+    border-color: rgba(200, 169, 126, 0.4);
+}
+.barista-order-header {
+    padding: 14px 18px;
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.barista-order-body {
+    padding: 14px 18px;
+    flex: 1;
+}
+.barista-item-row {
+    padding: 10px 0;
+    border-bottom: 1px dashed var(--border-subtle);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.barista-item-row:last-child {
+    border-bottom: none;
+}
+.barista-item-qty {
+    background: var(--primary-muted);
+    color: var(--primary-gold);
+    font-size: 15px;
+    font-weight: 700;
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.barista-item-done {
+    text-decoration: line-through;
+    opacity: 0.4;
+}
+.barista-agg-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+</style>
+<script>
+let pendingItems = [];
+let selectedItemIds = new Set();
+let completedLocalIds = new Set();
+let currentCategory = 'all';
+let currentViewMode = 'table'; // 'table' or 'item'
+let refreshInterval = null;
+let countdown = 30;
+let isAutoRefreshActive = true;
+let soundEnabled = true;
+let previousItemsCount = 0;
+
+// Audio Context for Chime
+let audioCtx = null;
+function playOrderChime() {
+    if (!soundEnabled) return;
+    try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+
+        const now = audioCtx.currentTime;
+        // Tone 1
+        const osc1 = audioCtx.createOscillator();
+        const gain1 = audioCtx.createGain();
+        osc1.type = 'sine';
+        osc1.frequency.setValueAtTime(784, now); // G5
+        gain1.gain.setValueAtTime(0.2, now);
+        gain1.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+        osc1.connect(gain1);
+        gain1.connect(audioCtx.destination);
+        osc1.start(now);
+        osc1.stop(now + 0.35);
+
+        // Tone 2
+        const osc2 = audioCtx.createOscillator();
+        const gain2 = audioCtx.createGain();
+        osc2.type = 'sine';
+        osc2.frequency.setValueAtTime(1046.5, now + 0.15); // C6
+        gain2.gain.setValueAtTime(0.25, now + 0.15);
+        gain2.gain.exponentialRampToValueAtTime(0.01, now + 0.55);
+        osc2.connect(gain2);
+        gain2.connect(audioCtx.destination);
+        osc2.start(now + 0.15);
+        osc2.stop(now + 0.55);
+    } catch (e) {
+        console.log('Audio chime error:', e);
+    }
+}
+
+function toggleSound() {
+    soundEnabled = !soundEnabled;
+    const icon = document.getElementById('sound-icon');
+    if (soundEnabled) {
+        icon.className = 'fas fa-volume-high';
+        showToast('Đã bật chuông báo đơn mới');
+        playOrderChime();
+    } else {
+        icon.className = 'fas fa-volume-xmark';
+        showToast('Đã tắt chuông báo', 'info');
+    }
+}
+
+async function loadBaristaQueue(isManual = false) {
+    const spinner = document.getElementById('refresh-spinner');
+    if (spinner) spinner.style.display = 'inline-block';
+
+    try {
+        const rawItems = await apiCall('/api/barista/pending') || [];
+        
+        // Filter out locally marked done items
+        const activeItems = rawItems.filter(item => !completedLocalIds.has(item.order_item_id));
+
+        // Detect new incoming orders
+        if (!isManual && activeItems.length > previousItemsCount && previousItemsCount !== 0) {
+            const newCount = activeItems.length - previousItemsCount;
+            playOrderChime();
+            showAlertBanner(`Vừa có thêm ${newCount} món đồ uống mới cần pha chế!`);
+        }
+
+        previousItemsCount = activeItems.length;
+        pendingItems = activeItems;
+
+        renderCategoryPills();
+        renderView();
+    } catch (e) {
+        console.error('Lỗi tải danh sách pha chế:', e);
+    } finally {
+        if (spinner) spinner.style.display = 'none';
+        countdown = 30;
+    }
+}
+
+function showAlertBanner(msg) {
+    const banner = document.getElementById('new-order-alert');
+    const msgEl = document.getElementById('new-order-msg');
+    if (banner && msgEl) {
+        msgEl.textContent = msg;
+        banner.style.display = 'flex';
+    }
+}
+
+function dismissAlert() {
+    const banner = document.getElementById('new-order-alert');
+    if (banner) banner.style.display = 'none';
+}
+
+function renderCategoryPills() {
+    const counts = {};
+    pendingItems.forEach(i => {
+        const cat = i.category || 'Khác';
+        counts[cat] = (counts[cat] || 0) + i.quantity;
+    });
+
+    document.getElementById('count-all').textContent = pendingItems.reduce((acc, i) => acc + i.quantity, 0);
+
+    const pillsDiv = document.getElementById('category-pills');
+    let pillsHtml = `<button class="cat-pill ${currentCategory === 'all' ? 'active' : ''}" onclick="setCategoryFilter('all')">Tất cả (${document.getElementById('count-all').textContent})</button>`;
+
+    Object.keys(counts).sort().forEach(cat => {
+        pillsHtml += `<button class="cat-pill ${currentCategory === cat ? 'active' : ''}" onclick="setCategoryFilter('${cat}')">${cat} (${counts[cat]})</button>`;
+    });
+
+    pillsDiv.innerHTML = pillsHtml;
+}
+
+function setCategoryFilter(cat) {
+    currentCategory = cat;
+    renderCategoryPills();
+    renderView();
+}
+
+function setViewMode(mode) {
+    currentViewMode = mode;
+    document.getElementById('view-by-table').classList.toggle('active', mode === 'table');
+    document.getElementById('view-by-item').classList.toggle('active', mode === 'item');
+    renderView();
+}
+
+function renderView() {
+    const filtered = currentCategory === 'all' ? pendingItems : pendingItems.filter(i => (i.category || 'Khác') === currentCategory);
+
+    const emptyDiv = document.getElementById('empty-queue');
+    const tableDiv = document.getElementById('table-view-grid');
+    const itemDiv = document.getElementById('item-view-grid');
+
+    if (filtered.length === 0) {
+        emptyDiv.style.display = 'block';
+        tableDiv.style.display = 'none';
+        itemDiv.style.display = 'none';
+        return;
+    }
+
+    emptyDiv.style.display = 'none';
+
+    if (currentViewMode === 'table') {
+        tableDiv.style.display = 'grid';
+        itemDiv.style.display = 'none';
+        renderTableView(filtered);
+    } else {
+        tableDiv.style.display = 'none';
+        itemDiv.style.display = 'grid';
+        renderItemView(filtered);
+    }
+}
+
+// ── View 1: By Table / Order Cards ──
+function renderTableView(items) {
+    // Group by order_id
+    const ordersMap = {};
+    items.forEach(item => {
+        if (!ordersMap[item.order_id]) {
+            ordersMap[item.order_id] = {
+                order_id: item.order_id,
+                table: item.table,
+                created_at: item.created_at,
+                items: []
+            };
+        }
+        ordersMap[item.order_id].items.push(item);
+    });
+
+    const orders = Object.values(ordersMap);
+    const container = document.getElementById('table-view-grid');
+
+    container.innerHTML = orders.map(order => {
+        const itemsHtml = order.items.map(it => {
+            const isChecked = selectedItemIds.has(it.order_item_id);
+            return `
+                <div class="barista-item-row" id="row-item-${it.order_item_id}">
+                    <input type="checkbox" style="width:18px;height:18px;accent-color:var(--primary-gold);cursor:pointer;" 
+                           ${isChecked ? 'checked' : ''} 
+                           onchange="toggleItemSelection(${it.order_item_id})">
+                    <div class="barista-item-qty">${it.quantity}</div>
+                    <div style="flex:1;">
+                        <strong style="font-size:14px;color:var(--text-primary);">${it.item_name}</strong>
+                        ${it.category ? `<span class="badge badge-gold" style="font-size:10px;margin-left:6px;">${it.category}</span>` : ''}
+                        ${it.notes ? `<div style="font-size:12px;color:var(--warning);margin-top:2px;"><i class="fas fa-comment-dots"></i> ${it.notes}</div>` : ''}
+                    </div>
+                    <button class="btn btn-secondary btn-sm" onclick="completeSingleItem(${it.order_item_id})" title="Đã xong món này">
+                        <i class="fas fa-check"></i>
+                    </button>
+                </div>
+            `;
+        }).join('');
+
+        return `
+            <div class="barista-order-card" id="card-order-${order.order_id}">
+                <div class="barista-order-header" style="cursor:pointer;" onclick="togglePanel('order-body-${order.order_id}', this)">
+                    <div>
+                        <strong style="font-size:16px;color:var(--primary-gold);">
+                            <i class="fas fa-couch"></i> ${order.table}
+                        </strong>
+                        <span style="font-size:12px;color:var(--text-muted);margin-left:8px;">#${order.order_id}</span>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <span style="font-size:12px;color:var(--text-secondary);"><i class="far fa-clock"></i> ${order.created_at}</span>
+                        <i class="fas fa-chevron-up panel-toggle-icon"></i>
+                    </div>
+                </div>
+                <div class="barista-order-body" id="order-body-${order.order_id}">
+                    ${itemsHtml}
+                </div>
+                <div style="padding:10px 18px;background:var(--bg-surface);border-top:1px solid var(--border-subtle);display:flex;justify-content:flex-end;">
+                    <button class="btn btn-primary btn-sm" onclick="completeWholeOrder(${order.order_id})" style="width:100%;">
+                        <i class="fas fa-check-double"></i> Hoàn thành toàn bộ bàn (${order.items.length} món)
+                    </button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// ── View 2: Aggregated Items View ──
+function renderItemView(items) {
+    const aggMap = {};
+    items.forEach(it => {
+        if (!aggMap[it.item_name]) {
+            aggMap[it.item_name] = {
+                name: it.item_name,
+                category: it.category,
+                total_qty: 0,
+                details: []
+            };
+        }
+        aggMap[it.item_name].total_qty += it.quantity;
+        aggMap[it.item_name].details.push(it);
+    });
+
+    const container = document.getElementById('item-view-grid');
+
+    container.innerHTML = Object.values(aggMap).map(agg => `
+        <div class="barista-agg-card">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                <div>
+                    <h4 style="font-size:16px;font-weight:700;color:var(--text-primary);margin-bottom:4px;">${agg.name}</h4>
+                    <span class="badge badge-gold" style="font-size:11px;">${agg.category || 'Đồ uống'}</span>
+                </div>
+                <div style="background:var(--primary-muted);color:var(--primary-gold);border:1px solid var(--primary-gold);font-size:20px;font-weight:800;width:44px;height:44px;border-radius:var(--radius-md);display:flex;align-items:center;justify-content:center;">
+                    ${agg.total_qty}
+                </div>
+            </div>
+
+            <div style="background:var(--bg-surface);padding:10px 12px;border-radius:var(--radius-sm);font-size:12px;color:var(--text-secondary);max-height:120px;overflow-y:auto;">
+                ${agg.details.map(d => `
+                    <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px dashed var(--border-subtle);">
+                        <span>${d.table}: x${d.quantity} ${d.notes ? `<i style="color:var(--warning);">(${d.notes})</i>` : ''}</span>
+                        <span style="color:var(--text-muted);">${d.created_at}</span>
+                    </div>
+                `).join('')}
+            </div>
+
+            <div style="display:flex;gap:8px;align-items:center;margin-top:auto;">
+                <input type="number" id="batch-qty-${agg.name.replace(/\s+/g,'_')}" class="form-control" style="width:70px;text-align:center;padding:6px;" min="1" max="${agg.total_qty}" value="${agg.total_qty}">
+                <button class="btn btn-primary btn-sm" style="flex:1;" onclick="completeBatchQty('${agg.name.replace(/'/g, "\\'")}', '${agg.name.replace(/\s+/g,'_')}')">
+                    <i class="fas fa-check"></i> Xong mẻ này
+                </button>
+            </div>
+        </div>
+    `).join('');
+}
+
+// ── Batch Selections ──
+function toggleItemSelection(orderItemId) {
+    if (selectedItemIds.has(orderItemId)) selectedItemIds.delete(orderItemId);
+    else selectedItemIds.add(orderItemId);
+    updateBatchToolbar();
+}
+
+function updateBatchToolbar() {
+    const toolbar = document.getElementById('batch-toolbar');
+    const countEl = document.getElementById('selected-items-count');
+    if (selectedItemIds.size > 0) {
+        toolbar.style.display = 'flex';
+        countEl.textContent = selectedItemIds.size;
+    } else {
+        toolbar.style.display = 'none';
+    }
+}
+
+function clearSelectedItems() {
+    selectedItemIds.clear();
+    updateBatchToolbar();
+    renderView();
+}
+
+async function completeSelectedItems() {
+    if (selectedItemIds.size === 0) return;
+    const ids = Array.from(selectedItemIds);
+    ids.forEach(id => completedLocalIds.add(id));
+    selectedItemIds.clear();
+    updateBatchToolbar();
+
+    // Loại bỏ ngay khỏi pendingItems và vẽ lại giao diện tức thì
+    pendingItems = pendingItems.filter(i => !ids.includes(i.order_item_id));
+    renderCategoryPills();
+    renderView();
+
+    try {
+        await apiCall('/api/barista/complete-items', 'POST', { item_ids: ids, note: `Hoàn tất ${ids.length} món` });
+    } catch(e) {}
+
+    showToast(`Đã hoàn thành ${ids.length} món đồ uống!`);
+    loadBaristaQueue();
+}
+
+async function completeSingleItem(orderItemId) {
+    completedLocalIds.add(orderItemId);
+    selectedItemIds.delete(orderItemId);
+    updateBatchToolbar();
+
+    // Loại bỏ ngay lập tức món này và vẽ lại giao diện biến mất ngay
+    pendingItems = pendingItems.filter(i => i.order_item_id !== orderItemId);
+    renderCategoryPills();
+    renderView();
+
+    try {
+        await apiCall('/api/barista/complete-items', 'POST', { item_ids: [orderItemId], note: 'Hoàn tất 1 món' });
+    } catch(e) {}
+
+    showToast('Đã đánh dấu hoàn thành món!');
+    loadBaristaQueue();
+}
+
+async function completeWholeOrder(orderId) {
+    const orderItems = pendingItems.filter(i => i.order_id === orderId);
+    const itemIds = orderItems.map(i => i.order_item_id);
+    itemIds.forEach(id => completedLocalIds.add(id));
+
+    // Loại bỏ ngay toàn bộ bàn này khỏi giao diện
+    pendingItems = pendingItems.filter(i => i.order_id !== orderId);
+    renderCategoryPills();
+    renderView();
+
+    try {
+        await apiCall('/api/barista/complete-items', 'POST', { order_ids: [orderId], item_ids: itemIds, note: 'Hoàn tất toàn bộ bàn' });
+    } catch(e) {}
+
+    showToast(`Đã hoàn tất toàn bộ đồ uống cho đơn #${orderId}!`);
+    loadBaristaQueue();
+}
+
+async function completeBatchQty(itemName, elementId) {
+    const input = document.getElementById(`batch-qty-${elementId}`);
+    const qtyToComplete = parseInt(input ? input.value : 1) || 1;
+
+    let remaining = qtyToComplete;
+    const completedIds = [];
+
+    for (const item of pendingItems) {
+        if (item.item_name === itemName && remaining > 0) {
+            completedLocalIds.add(item.order_item_id);
+            completedIds.push(item.order_item_id);
+            remaining -= item.quantity;
+        }
+    }
+
+    // Loại bỏ ngay các món đã xong và vẽ lại giao diện
+    pendingItems = pendingItems.filter(i => !completedIds.includes(i.order_item_id));
+    renderCategoryPills();
+    renderView();
+
+    try {
+        await apiCall('/api/barista/complete-items', 'POST', { item_ids: completedIds, note: `Làm xong ${qtyToComplete} ly ${itemName}` });
+    } catch(e) {}
+
+    showToast(`Đã làm xong ${qtyToComplete} ly ${itemName}!`);
+    loadBaristaQueue();
+}
+
+// ── Auto Refresh Management ──
+function startTimer() {
+    clearInterval(refreshInterval);
+    refreshInterval = setInterval(() => {
+        if (!isAutoRefreshActive) return;
+        countdown--;
+        const timerEl = document.getElementById('refresh-timer');
+        if (timerEl) timerEl.textContent = countdown;
+        if (countdown <= 0) {
+            loadBaristaQueue();
+        }
+    }, 1000);
+}
+
+function toggleAutoRefresh() {
+    isAutoRefreshActive = !isAutoRefreshActive;
+    const btn = document.getElementById('btn-pause-refresh');
+    if (isAutoRefreshActive) {
+        btn.innerHTML = '<i class="fas fa-pause"></i>';
+        showToast('Đã tiếp tục tự động làm mới');
+    } else {
+        btn.innerHTML = '<i class="fas fa-play"></i>';
+        showToast('Đã tạm dừng tự động làm mới', 'info');
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    loadBaristaQueue();
+    startTimer();
+});
+</script>
+{% endblock %}
