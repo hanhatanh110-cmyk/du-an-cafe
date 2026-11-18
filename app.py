@@ -324,8 +324,18 @@ def barista_complete_items():
         data = request.json or {}
         raw_item_ids = data.get('item_ids', [])
         raw_order_ids = data.get('order_ids', [])
-        item_ids = [int(x) for x in raw_item_ids if str(x).isdigit()]
-        order_ids = [int(x) for x in raw_order_ids if str(x).isdigit()]
+        item_ids = []
+        for x in raw_item_ids:
+            try:
+                item_ids.append(int(float(x)))
+            except (ValueError, TypeError):
+                pass
+        order_ids = []
+        for x in raw_order_ids:
+            try:
+                order_ids.append(int(float(x)))
+            except (ValueError, TypeError):
+                pass
         note = data.get('note', 'Pha chế hoàn tất')
         affected_orders = set(order_ids)
         
