@@ -64,15 +64,47 @@
         </div>
     </div>
 
-    <!-- Calendar Grid -->
+    <!-- Calendar Grid with Week-by-Week Navigation -->
     <div class="card">
-        <div class="card-header">
-            <div class="card-title"><i class="fas fa-calendar-alt"></i> <span id="cal-title">Lịch tháng</span></div>
-            <div style="display:flex;gap:8px;">
-                <button class="btn btn-secondary btn-sm" onclick="prevMonth()"><i class="fas fa-chevron-left"></i></button>
-                <button class="btn btn-secondary btn-sm" onclick="nextMonth()"><i class="fas fa-chevron-right"></i></button>
+        <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+            <div style="display:flex;align-items:center;gap:12px;">
+                <div class="card-title" style="margin:0;">
+                    <i class="fas fa-calendar-alt"></i> <span id="cal-title">Lịch tháng</span>
+                </div>
+                <div style="display:flex;gap:6px;">
+                    <button class="btn btn-secondary btn-sm" onclick="prevMonth()" title="Tháng trước"><i class="fas fa-chevron-left"></i></button>
+                    <button class="btn btn-secondary btn-sm" onclick="nextMonth()" title="Tháng sau"><i class="fas fa-chevron-right"></i></button>
+                </div>
+            </div>
+
+            <!-- View mode: Single week vs Stacked weeks -->
+            <div style="display:flex;gap:8px;align-items:center;">
+                <span style="font-size:12px;color:var(--text-muted);">Hiển thị:</span>
+                <div style="display:flex;background:var(--bg-surface);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);overflow:hidden;">
+                    <button class="btn btn-sm" id="btn-mode-week" onclick="setScheduleViewMode('single_week')" style="border:none;border-radius:0;padding:5px 12px;font-size:12px;font-weight:600;background:var(--primary-gold);color:#121212;">
+                        <i class="fas fa-calendar-week"></i> Theo 1 tuần
+                    </button>
+                    <button class="btn btn-sm" id="btn-mode-all" onclick="setScheduleViewMode('all_weeks')" style="border:none;border-radius:0;padding:5px 12px;font-size:12px;color:var(--text-secondary);background:transparent;">
+                        <i class="fas fa-layer-group"></i> Xếp tất cả các tuần
+                    </button>
+                </div>
             </div>
         </div>
+
+        <!-- Week Selector Toolbar (Shown in single week mode) -->
+        <div id="week-selector-bar" style="padding:12px 20px;border-bottom:1px solid var(--border-subtle);background:var(--bg-card);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <button class="week-nav-btn" onclick="prevWeek()" title="Tuần trước"><i class="fas fa-chevron-left"></i></button>
+                <div id="week-pills-container" style="display:flex;gap:8px;flex-wrap:wrap;">
+                    <!-- Dynamically rendered week pills: Tuần 1 (1-7), Tuần 2 (8-14), ... -->
+                </div>
+                <button class="week-nav-btn" onclick="nextWeek()" title="Tuần sau"><i class="fas fa-chevron-right"></i></button>
+            </div>
+            <button class="btn btn-secondary btn-sm" onclick="goToCurrentWeek()" style="font-size:12px;">
+                <i class="fas fa-calendar-day"></i> Về tuần này
+            </button>
+        </div>
+
         <div style="overflow-x:auto;padding:16px;">
             <div id="schedule-grid"></div>
         </div>
@@ -393,6 +425,57 @@
 .badge-early { background: rgba(155,89,182,0.15); color: #9b59b6; border: 1px solid rgba(155,89,182,0.3); }
 .badge-half { background: rgba(52,152,219,0.15); color: #3498db; border: 1px solid rgba(52,152,219,0.3); }
 .badge-absent { background: rgba(231,76,60,0.15); color: #e74c3c; border: 1px solid rgba(231,76,60,0.3); }
+
+/* Week selector & compact styles */
+.week-pill {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+    padding: 6px 14px;
+    border-radius: var(--radius-full);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+}
+.week-pill:hover {
+    color: var(--text-primary);
+    border-color: var(--primary-gold);
+}
+.week-pill.active {
+    background: var(--primary-gold);
+    color: #121212;
+    border-color: var(--primary-gold);
+    font-weight: 700;
+}
+.week-nav-btn {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.week-nav-btn:hover {
+    color: var(--primary-gold);
+    border-color: var(--primary-gold);
+}
+.today-col-header {
+    background: rgba(200, 169, 126, 0.15) !important;
+    border-top: 2px solid var(--primary-gold) !important;
+}
+.today-col-cell {
+    background: rgba(200, 169, 126, 0.05);
+}
 </style>
 
 <script>
