@@ -128,6 +128,25 @@ class MenuItem(db.Model):
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else ''
         }
 
+class Area(db.Model):
+    __tablename__ = 'areas'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False, unique=True)
+    description = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    tables = db.relationship('Table', backref='area_rel', lazy=True, cascade='all, delete-orphan')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'description': self.description or '',
+            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else '',
+            'tables_count': len(self.tables) if self.tables else 0
+        }
+
 class Table(db.Model):
     __tablename__ = 'tables'
     
@@ -136,6 +155,8 @@ class Table(db.Model):
     capacity = db.Column(db.Integer, default=4)
     status = db.Column(db.String(20), default='empty')  # empty, occupied, reserved
     floor = db.Column(db.Integer, default=1)
+    area_id = db.Column(db.Integer, db.ForeignKey('areas.id'), nullable=True)
+    area_name = db.Column(db.String(100), nullable=True)
 
     def to_dict(self):
         return {
@@ -143,7 +164,9 @@ class Table(db.Model):
             'number': self.number,
             'capacity': self.capacity,
             'status': self.status,
-            'floor': self.floor
+            'floor': self.floor,
+            'area_id': self.area_id,
+            'area_name': self.area_name or (self.area_rel.name if self.area_rel else (f'Tầng {self.floor}' if self.floor else 'Khu vực chính'))
         }
 
 class Staff(db.Model):

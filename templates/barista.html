@@ -260,7 +260,10 @@ async function loadBaristaQueue(isManual = false) {
         const rawItems = await apiCall('/api/barista/pending') || [];
         
         // Filter out locally marked done items
-        const activeItems = rawItems.filter(item => !completedLocalIds.has(item.order_item_id));
+        const activeItems = rawItems.filter(item => {
+            const id = item.order_item_id;
+            return !completedLocalIds.has(id) && !completedLocalIds.has(Number(id)) && !completedLocalIds.has(String(id));
+        });
 
         // Detect new incoming orders
         if (!isManual && activeItems.length > previousItemsCount && previousItemsCount !== 0) {
@@ -495,60 +498,164 @@ function clearSelectedItems() {
     renderView();
 }
 
+// Animation helper to make elements vanish immediately
+function animateAndRemoveRow(rowEl, callback) {
+    if (!rowEl) {
+        if (callback) callback();
+        return;
+    }
+    rowEl.style.transition = 'all 0.25s ease-out';
+    rowEl.style.opacity = '0';
+    rowEl.style.transform = 'translateX(40px)';
+    rowEl.style.maxHeight = '0';
+    rowEl.style.paddingTop = '0';
+    rowEl.style.paddingBottom = '0';
+    rowEl.style.marginTop = '0';
+    rowEl.style.marginBottom = '0';
+    rowEl.style.overflow = 'hidden';
+    setTimeout(() => {
+        if (rowEl && rowEl.parentNode) rowEl.remove();
+        if (callback) callback();
+    }, 250);
+}
+
+function animateAndRemoveCard(cardEl, callback) {
+    if (!cardEl) {
+        if (callback) callback();
+        return;
+    }
+    cardEl.style.transition = 'all 0.28s ease-out';
+    cardEl.style.opacity = '0';
+    cardEl.style.transform = 'scale(0.92)';
+    setTimeout(() => {
+        if (cardEl && cardEl.parentNode) cardEl.remove();
+        if (callback) callback();
+    }, 280);
+}
+
 async function completeSelectedItems() {
     if (selectedItemIds.size === 0) return;
     const ids = Array.from(selectedItemIds);
-    ids.forEach(id => completedLocalIds.add(id));
+    ids.forEach(id => {
+        completedLocalIds.add(id);
+        completedLocalIds.add(Number(id));
+        completedLocalIds.add(String(id));
+    });
     selectedItemIds.clear();
     updateBatchToolbar();
 
-    // Loại bỏ ngay khỏi pendingItems và vẽ lại giao diện tức thì
-    pendingItems = pendingItems.filter(i => !ids.includes(i.order_item_id));
+    // Loại bỏ khỏi pendingItems
+    const idsStr = ids.map(x => String(x));
+    pendingItems = pendingItems.filter(i => !idsStr.includes(String(i.order_item_id)));
     renderCategoryPills();
-    renderView();
+
+    // Biến mất tức thì các dòng đã chọn
+    ids.forEach(id => {
+        const rowEl = document.getElementById(`row-item-${id}`);
+        if (rowEl) {
+            const parentBody = rowEl.closest('.barista-order-body');
+            const orderCard = rowEl.closest('.barista-order-card');
+            animateAndRemoveRow(rowEl, () => {
+                if (parentBody && parentBody.querySelectorAll('.barista-item-row').length === 0) {
+                    animateAndRemoveCard(orderCard);
+                }
+            });
+        }
+    });
+
+    if (pendingItems.length === 0) {
+        setTimeout(() => {
+            const emptyDiv = document.getElementById('empty-queue');
+            if (emptyDiv) emptyDiv.style.display = 'block';
+        }, 300);
+    }
 
     try {
-        await apiCall('/api/barista/complete-items', 'POST', { item_ids: ids, note: `Hoàn tất ${ids.length} món` });
-    } catch(e) {}
+        await apiCall('/api/barista/complete-items', 'POST', { item_ids: ids.map(x => Number(x)), note: `Hoàn tất ${ids.length} món` });
+    } catch(e) {
+        console.error('Lỗi hoàn tất món đã chọn:', e);
+    }
 
     showToast(`Đã hoàn thành ${ids.length} món đồ uống!`);
-    loadBaristaQueue();
 }
 
 async function completeSingleItem(orderItemId) {
-    completedLocalIds.add(orderItemId);
-    selectedItemIds.delete(orderItemId);
+    const idNum = Number(orderItemId);
+    const idStr = String(orderItemId);
+    completedLocalIds.add(idNum);
+    completedLocalIds.add(idStr);
+    selectedItemIds.delete(idNum);
+    selectedItemIds.delete(idStr);
     updateBatchToolbar();
 
-    // Loại bỏ ngay lập tức món này và vẽ lại giao diện biến mất ngay
-    pendingItems = pendingItems.filter(i => i.order_item_id !== orderItemId);
+    // 1. Biến mất tức thì phần tử dòng của món này
+    const rowEl = document.getElementById(`row-item-${orderItemId}`);
+    const parentBody = rowEl ? rowEl.closest('.barista-order-body') : null;
+    const orderCard = rowEl ? rowEl.closest('.barista-order-card') : null;
+
+    // Loại bỏ khỏi danh sách pendingItems
+    pendingItems = pendingItems.filter(i => String(i.order_item_id) !== idStr);
     renderCategoryPills();
-    renderView();
+
+    animateAndRemoveRow(rowEl, () => {
+        // Kiểm tra xem thẻ bàn này còn món nào khác đang chờ không
+        if (parentBody && parentBody.querySelectorAll('.barista-item-row').length === 0) {
+            animateAndRemoveCard(orderCard, () => {
+                if (pendingItems.length === 0) {
+                    const emptyDiv = document.getElementById('empty-queue');
+                    if (emptyDiv) emptyDiv.style.display = 'block';
+                }
+            });
+        } else if (pendingItems.length === 0) {
+            const emptyDiv = document.getElementById('empty-queue');
+            if (emptyDiv) emptyDiv.style.display = 'block';
+        }
+    });
 
     try {
-        await apiCall('/api/barista/complete-items', 'POST', { item_ids: [orderItemId], note: 'Hoàn tất 1 món' });
-    } catch(e) {}
+        await apiCall('/api/barista/complete-items', 'POST', { item_ids: [idNum], note: 'Hoàn tất 1 món' });
+    } catch(e) {
+        console.error('Lỗi hoàn tất món:', e);
+    }
 
     showToast('Đã đánh dấu hoàn thành món!');
-    loadBaristaQueue();
 }
 
 async function completeWholeOrder(orderId) {
-    const orderItems = pendingItems.filter(i => i.order_id === orderId);
+    const idStr = String(orderId);
+    const orderItems = pendingItems.filter(i => String(i.order_id) === idStr);
     const itemIds = orderItems.map(i => i.order_item_id);
-    itemIds.forEach(id => completedLocalIds.add(id));
 
-    // Loại bỏ ngay toàn bộ bàn này khỏi giao diện
-    pendingItems = pendingItems.filter(i => i.order_id !== orderId);
+    itemIds.forEach(id => {
+        completedLocalIds.add(id);
+        completedLocalIds.add(Number(id));
+        completedLocalIds.add(String(id));
+        selectedItemIds.delete(id);
+        selectedItemIds.delete(Number(id));
+        selectedItemIds.delete(String(id));
+    });
+    updateBatchToolbar();
+
+    // Loại bỏ ngay toàn bộ bàn này khỏi danh sách
+    pendingItems = pendingItems.filter(i => String(i.order_id) !== idStr);
     renderCategoryPills();
-    renderView();
+
+    // Biến mất tức thì thẻ bàn này
+    const cardEl = document.getElementById(`card-order-${orderId}`);
+    animateAndRemoveCard(cardEl, () => {
+        if (pendingItems.length === 0) {
+            const emptyDiv = document.getElementById('empty-queue');
+            if (emptyDiv) emptyDiv.style.display = 'block';
+        }
+    });
 
     try {
-        await apiCall('/api/barista/complete-items', 'POST', { order_ids: [orderId], item_ids: itemIds, note: 'Hoàn tất toàn bộ bàn' });
-    } catch(e) {}
+        await apiCall('/api/barista/complete-items', 'POST', { order_ids: [Number(orderId)], item_ids: itemIds.map(x => Number(x)), note: 'Hoàn tất toàn bộ bàn' });
+    } catch(e) {
+        console.error('Lỗi hoàn tất bàn:', e);
+    }
 
     showToast(`Đã hoàn tất toàn bộ đồ uống cho đơn #${orderId}!`);
-    loadBaristaQueue();
 }
 
 async function completeBatchQty(itemName, elementId) {
@@ -561,22 +668,24 @@ async function completeBatchQty(itemName, elementId) {
     for (const item of pendingItems) {
         if (item.item_name === itemName && remaining > 0) {
             completedLocalIds.add(item.order_item_id);
+            completedLocalIds.add(Number(item.order_item_id));
+            completedLocalIds.add(String(item.order_item_id));
             completedIds.push(item.order_item_id);
             remaining -= item.quantity;
         }
     }
 
     // Loại bỏ ngay các món đã xong và vẽ lại giao diện
-    pendingItems = pendingItems.filter(i => !completedIds.includes(i.order_item_id));
+    const compStr = completedIds.map(x => String(x));
+    pendingItems = pendingItems.filter(i => !compStr.includes(String(i.order_item_id)));
     renderCategoryPills();
     renderView();
 
     try {
-        await apiCall('/api/barista/complete-items', 'POST', { item_ids: completedIds, note: `Làm xong ${qtyToComplete} ly ${itemName}` });
+        await apiCall('/api/barista/complete-items', 'POST', { item_ids: completedIds.map(x => Number(x)), note: `Làm xong ${qtyToComplete} ly ${itemName}` });
     } catch(e) {}
 
     showToast(`Đã làm xong ${qtyToComplete} ly ${itemName}!`);
-    loadBaristaQueue();
 }
 
 // ── Auto Refresh Management ──

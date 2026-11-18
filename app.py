@@ -6,7 +6,8 @@ from models import (
     Order, OrderItem, Payment, Voucher,
     Ingredient, MenuIngredient,
     Member, PointTransaction, PointSetting,
-    User, ShiftSchedule, SalaryRecord, OrderHistory
+    User, ShiftSchedule, SalaryRecord, OrderHistory,
+    Area
 )
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
@@ -320,8 +321,10 @@ def get_barista_pending():
 def barista_complete_items():
     u = get_current_user()
     data = request.json or {}
-    item_ids = data.get('item_ids', [])
-    order_ids = data.get('order_ids', [])
+    raw_item_ids = data.get('item_ids', [])
+    raw_order_ids = data.get('order_ids', [])
+    item_ids = [int(x) for x in raw_item_ids if str(x).isdigit()]
+    order_ids = [int(x) for x in raw_order_ids if str(x).isdigit()]
     note = data.get('note', 'Pha chế hoàn tất')
     affected_orders = set(order_ids)
     
@@ -649,8 +652,76 @@ def add_category():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 # ==============================================================================
-# TABLE MANAGEMENT API
+# AREA & TABLE MANAGEMENT API
 # ==============================================================================
+
+@app.route('/api/areas', methods=['GET'])
+def get_areas():
+    try:
+        areas = Area.query.order_by(Area.id.asc()).all()
+        results = []
+        for a in areas:
+            a_dict = a.to_dict()
+            results.append(a_dict)
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/areas', methods=['POST'])
+def add_area():
+    try:
+        data = request.json or request.form
+        name = data.get('name', '').strip()
+        if not name:
+            return jsonify({'success': False, 'message': 'Tên khu vực không được để trống!'}), 400
+
+        existing = Area.query.filter_by(name=name).first()
+        if existing:
+            return jsonify({'success': False, 'message': f'Khu vực "{name}" đã tồn tại!'}), 400
+
+        area = Area(name=name, description=data.get('description', '').strip())
+        db.session.add(area)
+        db.session.commit()
+        return jsonify({'success': True, 'message': f'Tạo khu vực "{name}" thành công!', 'area': area.to_dict()}), 201
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/areas/<id>', methods=['PUT'])
+def update_area(id):
+    try:
+        area = Area.query.get(id)
+        if not area:
+            return jsonify({'success': False, 'message': 'Không tìm thấy khu vực!'}), 404
+        data = request.json or request.form
+        name = data.get('name', '').strip()
+        if name:
+            existing = Area.query.filter(Area.name == name, Area.id != area.id).first()
+            if existing:
+                return jsonify({'success': False, 'message': f'Tên khu vực "{name}" đã tồn tại!'}), 400
+            area.name = name
+            for t in area.tables:
+                t.area_name = name
+        if 'description' in data:
+            area.description = data['description'].strip()
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Cập nhật khu vực thành công!', 'area': area.to_dict()})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/areas/<id>', methods=['DELETE'])
+def delete_area(id):
+    try:
+        area = Area.query.get(id)
+        if not area:
+            return jsonify({'success': False, 'message': 'Không tìm thấy khu vực!'}), 404
+        occupied = [t for t in area.tables if t.status == 'occupied']
+        if occupied:
+            return jsonify({'success': False, 'message': 'Không thể xóa khu vực đang có bàn có khách!'}), 400
+        db.session.delete(area)
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Xóa khu vực thành công!'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/tables', methods=['GET'])
 def get_tables():
@@ -680,21 +751,39 @@ def add_table():
         data = request.json or request.form
         number = data.get('number', '').strip()
         if not number:
-            return jsonify({'success': False, 'message': 'Số/Tên bàn không được để trống!'}), 400
+            return jsonify({'success': False, 'message': 'Tên/Số bàn không được để trống!'}), 400
 
         existing = Table.query.filter_by(number=number).first()
         if existing:
             return jsonify({'success': False, 'message': f'Bàn "{number}" đã tồn tại!'}), 400
 
+        area_id = data.get('area_id')
+        area_name = data.get('area_name', '').strip()
+        floor = int(data.get('floor', 1))
+
+        if area_id:
+            area = Area.query.get(int(area_id))
+            if area:
+                area_name = area.name
+                floor = area.id
+        elif not area_name:
+            first_area = Area.query.first()
+            if first_area:
+                area_id = first_area.id
+                area_name = first_area.name
+                floor = first_area.id
+
         table = Table(
             number=number,
             capacity=int(data.get('capacity', 4)),
             status=data.get('status', 'empty'),
-            floor=int(data.get('floor', 1))
+            floor=floor,
+            area_id=int(area_id) if area_id else None,
+            area_name=area_name if area_name else (f'Tầng {floor}' if floor else 'Khu vực chính')
         )
         db.session.add(table)
         db.session.commit()
-        return jsonify({'success': True, 'message': 'Thêm bàn mới thành công!', 'table': table.to_dict()}), 201
+        return jsonify({'success': True, 'message': f'Tạo bàn "{number}" thành công!', 'table': table.to_dict()}), 201
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -710,6 +799,14 @@ def update_table(id):
         if 'capacity' in data: table.capacity = int(data['capacity'])
         if 'status' in data: table.status = data['status'].strip()
         if 'floor' in data: table.floor = int(data['floor'])
+        if 'area_id' in data and data['area_id']:
+            area = Area.query.get(int(data['area_id']))
+            if area:
+                table.area_id = area.id
+                table.area_name = area.name
+                table.floor = area.id
+        elif 'area_name' in data:
+            table.area_name = data['area_name'].strip()
 
         db.session.add(table)
         db.session.commit()
@@ -1478,6 +1575,31 @@ if __name__ == '__main__':
     sys.stdout.reconfigure(encoding='utf-8')
     with app.app_context():
         db.create_all()
+        try:
+            from sqlalchemy import text
+            with db.engine.connect() as conn:
+                cols = [r[1] for r in conn.execute(text("PRAGMA table_info(tables)")).fetchall()]
+                if 'area_id' not in cols:
+                    conn.execute(text("ALTER TABLE tables ADD COLUMN area_id INTEGER"))
+                if 'area_name' not in cols:
+                    conn.execute(text("ALTER TABLE tables ADD COLUMN area_name VARCHAR(100)"))
+                conn.commit()
+        except Exception:
+            pass
+
+        if not Area.query.first():
+            a1 = Area(name='Tầng 1', description='Khu vực tầng trệt')
+            a2 = Area(name='Tầng 2', description='Khu vực tầng 2 thoáng mát')
+            db.session.add_all([a1, a2])
+            db.session.commit()
+            for t in Table.query.filter_by(floor=1).all():
+                t.area_id = a1.id
+                t.area_name = a1.name
+            for t in Table.query.filter_by(floor=2).all():
+                t.area_id = a2.id
+                t.area_name = a2.name
+            db.session.commit()
+
         if not PointSetting.query.first():
             db.session.add(PointSetting())
             db.session.commit()
@@ -1488,9 +1610,6 @@ if __name__ == '__main__':
             db.session.commit()
             print("Default account: admin / admin123")
     print("Cafe Antigravity Starting on http://127.0.0.1:5000")
-    import os
-
-if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=port, debug=True)
 

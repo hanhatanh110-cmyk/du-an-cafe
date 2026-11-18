@@ -266,7 +266,7 @@ function renderMenuItems(items) {
 function renderTableSelector() {
     const select = document.getElementById('cart-table-select');
     const options = allTables.map(t => {
-        let label = `${t.number} (${t.capacity} chỗ)`;
+        let label = `${t.number}${t.area_name ? ` (${t.area_name})` : ''}`;
         if (t.status === 'occupied') label += ' [Có khách]';
         if (t.status === 'reserved') label += ' [Đã đặt]';
         return `<option value="${t.id}">${label}</option>`;

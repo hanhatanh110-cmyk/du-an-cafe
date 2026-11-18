@@ -1,38 +1,161 @@
 {% extends "base.html" %}
 
-{% block page_title %}Sơ đồ & Quản lý bàn{% endblock %}
-{% block page_subtitle %}Theo dõi tình trạng bàn, gọi món và chuyển đổi trạng thái bàn theo thời gian thực{% endblock %}
+{% block page_title %}Sơ đồ & Quản lý bàn theo khu vực{% endblock %}
+{% block page_subtitle %}Theo dõi tình trạng bàn, quản lý khu vực và lọc trạng thái bàn nhanh chóng{% endblock %}
 
 {% block topbar_action %}
-<button class="btn btn-primary btn-sm" onclick="openAddTableModal()">
-    <i class="fas fa-plus"></i> Thêm bàn mới
+<button class="btn btn-primary btn-sm" onclick="openAddAreaModal()">
+    <i class="fas fa-layer-group"></i> Tạo khu vực
 </button>
 {% endblock %}
 
 {% block content %}
-<!-- Legend / Guide Bar -->
-<div style="display: flex; gap: 20px; align-items: center; margin-bottom: 24px; padding: 12px 18px; background: var(--bg-card); border-radius: var(--radius-md); border: 1px solid var(--border-subtle); flex-wrap: wrap;">
-    <span style="font-size: 13px; font-weight: 600; color: var(--text-secondary);">Trạng thái bàn:</span>
-    <div style="display: flex; align-items: center; gap: 8px;">
-        <span class="badge badge-success"><i class="fas fa-circle"></i> Trống (Sẵn sàng)</span>
-    </div>
-    <div style="display: flex; align-items: center; gap: 8px;">
-        <span class="badge badge-danger"><i class="fas fa-circle"></i> Đang có khách</span>
-    </div>
-    <div style="display: flex; align-items: center; gap: 8px;">
-        <span class="badge badge-warning"><i class="fas fa-circle"></i> Đã đặt trước</span>
+<!-- Quick Status Filters & Keyboard Shortcuts Bar -->
+<div class="card" style="margin-bottom: 22px; padding: 14px 18px; border: 1px solid var(--border-subtle);">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px;">
+        <!-- Status Filter Buttons -->
+        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <span style="font-size: 13px; font-weight: 700; color: var(--text-secondary); margin-right: 4px;">
+                <i class="fas fa-bolt" style="color: var(--primary-gold);"></i> Phím tắt kiểm tra:
+            </span>
+            <button class="quick-filter-btn active" id="filter-btn-all" onclick="setQuickStatusFilter('all')" title="Xem toàn bộ bàn (Phím 1 hoặc A)">
+                <i class="fas fa-border-all"></i> Tất cả
+                <span class="badge" id="count-status-all" style="background: rgba(255,255,255,0.15); margin-left: 4px;">0</span>
+                <span class="hotkey-hint">1</span>
+            </button>
+            <button class="quick-filter-btn btn-filter-occupied" id="filter-btn-occupied" onclick="setQuickStatusFilter('occupied')" title="Xem toàn bộ bàn có khách (Phím 2 hoặc K)">
+                <i class="fas fa-user-group"></i> Có khách
+                <span class="badge badge-danger" id="count-status-occupied" style="margin-left: 4px;">0</span>
+                <span class="hotkey-hint">2</span>
+            </button>
+            <button class="quick-filter-btn btn-filter-reserved" id="filter-btn-reserved" onclick="setQuickStatusFilter('reserved')" title="Xem toàn bộ bàn đặt trước (Phím 3 hoặc D)">
+                <i class="fas fa-bookmark"></i> Đặt trước
+                <span class="badge badge-warning" id="count-status-reserved" style="margin-left: 4px;">0</span>
+                <span class="hotkey-hint">3</span>
+            </button>
+            <button class="quick-filter-btn btn-filter-empty" id="filter-btn-empty" onclick="setQuickStatusFilter('empty')" title="Xem toàn bộ bàn trống (Phím 4 hoặc T)">
+                <i class="fas fa-circle-check"></i> Trống
+                <span class="badge badge-success" id="count-status-empty" style="margin-left: 4px;">0</span>
+                <span class="hotkey-hint">4</span>
+            </button>
+        </div>
+
+        <!-- Area Filter Selector -->
+        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <span style="font-size: 12px; color: var(--text-muted);"><i class="fas fa-map-marker-alt"></i> Khu vực:</span>
+            <div id="area-filter-pills" style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
+                <!-- Populated dynamically -->
+            </div>
+        </div>
     </div>
 </div>
 
-<!-- Tables Grid -->
-<div class="tables-grid" id="tables-container">
-    <div style="grid-column: 1 / -1; text-align: center; color: var(--text-muted); padding: 50px;">
+<!-- Active Filter Notice Banner (when filtered) -->
+<div id="filter-indicator-bar" style="display: none; background: rgba(200, 169, 126, 0.1); border: 1px dashed var(--primary-gold); border-radius: var(--radius-sm); padding: 8px 16px; margin-bottom: 20px; align-items: center; justify-content: space-between;">
+    <div style="display: flex; align-items: center; gap: 8px; font-size: 13px;">
+        <i class="fas fa-filter" style="color: var(--primary-gold);"></i>
+        <span>Đang lọc: <strong id="filter-indicator-text" style="color: var(--primary-gold);">Tất cả bàn</strong></span>
+        <span style="color: var(--text-muted);">— tìm thấy <span id="filter-indicator-count" style="font-weight: 700; color: #fff;">0</span> bàn</span>
+    </div>
+    <button class="btn btn-secondary btn-sm" onclick="setQuickStatusFilter('all')" style="padding: 2px 10px; font-size: 11px;">
+        <i class="fas fa-times"></i> Xóa lọc
+    </button>
+</div>
+
+<!-- Areas & Tables Container -->
+<div id="areas-and-tables-container">
+    <div style="text-align: center; color: var(--text-muted); padding: 60px;">
         <i class="fas fa-spinner fa-spin fa-2x"></i>
-        <p style="margin-top: 10px;">Đang tải sơ đồ bàn...</p>
+        <p style="margin-top: 12px;">Đang tải sơ đồ khu vực &amp; bàn...</p>
     </div>
 </div>
 
-<!-- Modal: Thao tác trên bàn (Table Action Modal) -->
+<!-- Modal: Tạo khu vực mới (Add Area Modal) -->
+<div id="add-area-modal" class="modal-backdrop">
+    <div class="modal-box" style="max-width: 440px;">
+        <div class="modal-header">
+            <h3 style="color: var(--primary-gold);"><i class="fas fa-layer-group"></i> Tạo khu vực mới</h3>
+            <button class="modal-close-btn" onclick="closeModal('add-area-modal')">&times;</button>
+        </div>
+        <form id="add-area-form" onsubmit="submitAddArea(event)">
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Tên khu vực *</label>
+                    <input type="text" id="add-area-name" class="form-control" placeholder="Ví dụ: Tầng 1, Tầng 2, Sân vườn, Phòng VIP..." required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Mô tả (tùy chọn)</label>
+                    <input type="text" id="add-area-desc" class="form-control" placeholder="Ví dụ: Khu vực ngoài trời thoáng mát...">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="closeModal('add-area-modal')">Hủy</button>
+                <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-save"></i> Lưu khu vực</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal: Sửa khu vực (Edit Area Modal) -->
+<div id="edit-area-modal" class="modal-backdrop">
+    <div class="modal-box" style="max-width: 440px;">
+        <div class="modal-header">
+            <h3 style="color: var(--primary-gold);"><i class="fas fa-pen-to-square"></i> Cập nhật khu vực</h3>
+            <button class="modal-close-btn" onclick="closeModal('edit-area-modal')">&times;</button>
+        </div>
+        <form id="edit-area-form" onsubmit="submitEditArea(event)">
+            <div class="modal-body">
+                <input type="hidden" id="edit-area-id">
+                <div class="form-group">
+                    <label class="form-label">Tên khu vực *</label>
+                    <input type="text" id="edit-area-name" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Mô tả</label>
+                    <input type="text" id="edit-area-desc" class="form-control">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="closeModal('edit-area-modal')">Hủy</button>
+                <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-check"></i> Cập nhật</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal: Tạo bàn trong khu vực (Add Table Modal) -->
+<!-- Bỏ mục sức chứa và trạng thái, chỉ giữ lại mục tên bàn theo đúng yêu cầu -->
+<div id="add-table-modal" class="modal-backdrop">
+    <div class="modal-box" style="max-width: 440px;">
+        <div class="modal-header">
+            <h3 style="color: var(--primary-gold);"><i class="fas fa-plus-circle"></i> Tạo bàn mới</h3>
+            <button class="modal-close-btn" onclick="closeModal('add-table-modal')">&times;</button>
+        </div>
+        <form id="add-table-form" onsubmit="submitAddTable(event)">
+            <div class="modal-body">
+                <input type="hidden" id="add-table-area-id">
+                
+                <div class="form-group">
+                    <label class="form-label">Khu vực</label>
+                    <div id="add-table-area-label" style="padding: 9px 12px; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); font-weight: 600; color: var(--primary-gold);">
+                        <i class="fas fa-map-marker-alt"></i> Tầng 1
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Tên bàn *</label>
+                    <input type="text" id="add-table-number" class="form-control" placeholder="Ví dụ: Bàn 01, Bàn VIP, Ngoài trời 02..." required autofocus>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="closeModal('add-table-modal')">Hủy</button>
+                <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-save"></i> Lưu bàn</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal: Chi tiết & Thao tác trên bàn (Table Action Modal) -->
 <div id="table-action-modal" class="modal-backdrop">
     <div class="modal-box" style="max-width: 440px;">
         <div class="modal-header">
@@ -75,45 +198,9 @@
     </div>
 </div>
 
-<!-- Modal: Thêm bàn mới (Add Table Modal) -->
-<div id="add-table-modal" class="modal-backdrop">
-    <div class="modal-box">
-        <div class="modal-header">
-            <h3 style="color: var(--primary-gold);"><i class="fas fa-plus-circle"></i> Thêm bàn mới</h3>
-            <button class="modal-close-btn" onclick="closeModal('add-table-modal')">&times;</button>
-        </div>
-        <form id="add-table-form" onsubmit="submitAddTable(event)">
-            <div class="modal-body">
-                <div class="form-group">
-                    <label class="form-label">Tên / Số bàn *</label>
-                    <input type="text" id="add-table-number" class="form-control" placeholder="Ví dụ: Bàn 01, Bàn VIP 1, Bàn Ngoài Trời..." required>
-                </div>
-
-                <div class="form-group">
-                    <label class="form-label">Sức chứa (Số ghế) *</label>
-                    <input type="number" id="add-table-capacity" class="form-control" value="4" min="1" max="100" required>
-                </div>
-
-                <div class="form-group">
-                    <label class="form-label">Trạng thái khởi tạo</label>
-                    <select id="add-table-status" class="form-select">
-                        <option value="empty">Trống (Sẵn sàng phục vụ)</option>
-                        <option value="reserved">Đã đặt trước</option>
-                        <option value="occupied">Có khách</option>
-                    </select>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary btn-sm" onclick="closeModal('add-table-modal')">Hủy</button>
-                <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-save"></i> Lưu bàn</button>
-            </div>
-        </form>
-    </div>
-</div>
-
 <!-- Modal: Sửa bàn (Edit Table Modal) -->
 <div id="edit-table-modal" class="modal-backdrop">
-    <div class="modal-box">
+    <div class="modal-box" style="max-width: 440px;">
         <div class="modal-header">
             <h3 style="color: var(--primary-gold);"><i class="fas fa-pen-to-square"></i> Cập nhật thông tin bàn</h3>
             <button class="modal-close-btn" onclick="closeModal('edit-table-modal')">&times;</button>
@@ -122,13 +209,15 @@
             <div class="modal-body">
                 <input type="hidden" id="edit-table-id">
                 <div class="form-group">
-                    <label class="form-label">Tên / Số bàn *</label>
+                    <label class="form-label">Tên bàn *</label>
                     <input type="text" id="edit-table-number" class="form-control" required>
                 </div>
 
                 <div class="form-group">
-                    <label class="form-label">Sức chứa (Số ghế) *</label>
-                    <input type="number" id="edit-table-capacity" class="form-control" min="1" max="100" required>
+                    <label class="form-label">Thuộc khu vực</label>
+                    <select id="edit-table-area-id" class="form-select">
+                        <!-- Loaded dynamically -->
+                    </select>
                 </div>
 
                 <div class="form-group">
@@ -150,89 +239,369 @@
 {% endblock %}
 
 {% block scripts %}
+<style>
+.quick-filter-btn {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+    padding: 7px 14px;
+    border-radius: var(--radius-full);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    transition: all 0.2s ease;
+}
+.quick-filter-btn:hover {
+    border-color: var(--primary-gold);
+    color: var(--text-primary);
+}
+.quick-filter-btn.active {
+    background: var(--primary-gold);
+    color: #121316;
+    border-color: var(--primary-gold);
+    font-weight: 700;
+    box-shadow: 0 2px 8px rgba(200, 169, 126, 0.35);
+}
+.quick-filter-btn.btn-filter-occupied.active {
+    background: var(--danger);
+    color: #fff;
+    border-color: var(--danger);
+    box-shadow: 0 2px 8px rgba(231, 76, 60, 0.4);
+}
+.quick-filter-btn.btn-filter-reserved.active {
+    background: var(--warning);
+    color: #121316;
+    border-color: var(--warning);
+    box-shadow: 0 2px 8px rgba(241, 196, 15, 0.4);
+}
+.quick-filter-btn.btn-filter-empty.active {
+    background: var(--success);
+    color: #fff;
+    border-color: var(--success);
+    box-shadow: 0 2px 8px rgba(46, 204, 113, 0.4);
+}
+.hotkey-hint {
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 4px;
+    color: inherit;
+    line-height: 1.2;
+}
+.area-filter-tab {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+    padding: 5px 12px;
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.area-filter-tab:hover {
+    color: var(--text-primary);
+    border-color: var(--border-medium);
+}
+.area-filter-tab.active {
+    background: var(--bg-card);
+    border-color: var(--primary-gold);
+    color: var(--primary-gold);
+    font-weight: 600;
+}
+.area-section-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    margin-bottom: 24px;
+    padding: 18px 20px;
+    box-shadow: var(--shadow-sm);
+}
+.area-section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border-subtle);
+    padding-bottom: 12px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+</style>
+
 <script>
 let allTablesList = [];
-let currentFloorFilter = 'all';
+let allAreasList = [];
+let currentStatusFilter = 'all'; // 'all', 'occupied', 'reserved', 'empty'
+let currentAreaFilter = 'all';   // 'all' or area_id
 let currentSelectedTable = null;
 
-// Initialize
-async function loadTables() {
+// Helper to escape HTML characters
+function escapeHtml(text) {
+    if (!text) return '';
+    return text.toString()
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+// ── Initialize & Data Fetching ──
+async function loadData() {
     try {
-        allTablesList = await apiCall('/api/tables');
-        renderTablesGrid();
+        const [areas, tables] = await Promise.all([
+            apiCall('/api/areas'),
+            apiCall('/api/tables')
+        ]);
+        allAreasList = areas || [];
+        allTablesList = tables || [];
+
+        updateStatusCounts();
+        renderAreaFilterPills();
+        renderAreasAndTables();
     } catch (e) {
-        console.error('Error loading tables:', e);
+        console.error('Lỗi tải dữ liệu bàn và khu vực:', e);
     }
 }
 
-// Switch Floor Tab
-function switchFloor(floor, btn) {
-    currentFloorFilter = floor;
-    document.querySelectorAll('.floor-tab').forEach(b => b.classList.remove('active'));
-    if (btn) btn.classList.add('active');
-    renderTablesGrid();
+// ── Calculate and Update Counts for Status Buttons ──
+function updateStatusCounts() {
+    const total = allTablesList.length;
+    const occupied = allTablesList.filter(t => t.status === 'occupied').length;
+    const reserved = allTablesList.filter(t => t.status === 'reserved').length;
+    const empty = allTablesList.filter(t => t.status === 'empty' || !t.status).length;
+
+    document.getElementById('count-status-all').textContent = total;
+    document.getElementById('count-status-occupied').textContent = occupied;
+    document.getElementById('count-status-reserved').textContent = reserved;
+    document.getElementById('count-status-empty').textContent = empty;
 }
 
-// Render Tables Grid
-function renderTablesGrid() {
-    const container = document.getElementById('tables-container');
-    const filtered = allTablesList;
+// ── Quick Status Filter Switcher ──
+function setQuickStatusFilter(status) {
+    currentStatusFilter = status;
 
-    if (filtered.length === 0) {
+    // Update active button classes
+    document.querySelectorAll('.quick-filter-btn').forEach(btn => btn.classList.remove('active'));
+    const targetBtn = document.getElementById(`filter-btn-${status}`);
+    if (targetBtn) targetBtn.classList.add('active');
+
+    // Update notice banner
+    const indicator = document.getElementById('filter-indicator-bar');
+    const indicatorText = document.getElementById('filter-indicator-text');
+    const indicatorCount = document.getElementById('filter-indicator-count');
+
+    if (status === 'all') {
+        indicator.style.display = 'none';
+    } else {
+        const statusMap = {
+            'occupied': 'Bàn có khách',
+            'reserved': 'Bàn đặt trước',
+            'empty': 'Bàn trống (Sẵn sàng)'
+        };
+        const count = allTablesList.filter(t => status === 'empty' ? (t.status === 'empty' || !t.status) : t.status === status).length;
+        indicatorText.textContent = statusMap[status] || status;
+        indicatorCount.textContent = count;
+        indicator.style.display = 'flex';
+    }
+
+    renderAreasAndTables();
+}
+
+// ── Area Selector Pills ──
+function renderAreaFilterPills() {
+    const container = document.getElementById('area-filter-pills');
+    let html = `
+        <button class="area-filter-tab ${currentAreaFilter === 'all' ? 'active' : ''}" onclick="setAreaFilter('all')">
+            Tất cả khu vực
+        </button>
+    `;
+    allAreasList.forEach(a => {
+        html += `
+            <button class="area-filter-tab ${String(currentAreaFilter) === String(a.id) ? 'active' : ''}" onclick="setAreaFilter(${a.id})">
+                ${escapeHtml(a.name)}
+            </button>
+        `;
+    });
+    container.innerHTML = html;
+}
+
+function setAreaFilter(areaId) {
+    currentAreaFilter = areaId;
+    renderAreaFilterPills();
+    renderAreasAndTables();
+}
+
+// ── Render Areas & Tables View ──
+function renderAreasAndTables() {
+    const container = document.getElementById('areas-and-tables-container');
+
+    if (allAreasList.length === 0 && allTablesList.length === 0) {
         container.innerHTML = `
-            <div style="grid-column: 1 / -1; text-align: center; color: var(--text-muted); padding: 50px;">
-                <i class="fas fa-couch fa-2x" style="opacity: 0.3; margin-bottom: 10px;"></i>
-                <p>Chưa có bàn nào. Nhấn "Thêm bàn mới" để tạo bàn.</p>
+            <div style="text-align: center; color: var(--text-muted); padding: 60px; background: var(--bg-card); border-radius: var(--radius-md); border: 1px solid var(--border-subtle);">
+                <i class="fas fa-layer-group fa-3x" style="opacity: 0.3; margin-bottom: 14px;"></i>
+                <h4 style="font-size: 16px; margin-bottom: 8px;">Chưa có khu vực nào</h4>
+                <p style="font-size: 13px; margin-bottom: 16px;">Hãy tạo khu vực đầu tiên (ví dụ: Tầng 1, Sân vườn) để bắt đầu thêm bàn.</p>
+                <button class="btn btn-primary btn-sm" onclick="openAddAreaModal()">
+                    <i class="fas fa-plus"></i> Tạo khu vực ngay
+                </button>
             </div>
         `;
         return;
     }
 
-    container.innerHTML = filtered.map(t => {
-        let statusBadge = '<span class="badge badge-success">Trống</span>';
-        let detailHtml = '<div class="table-card-time"><i class="fas fa-check"></i> Sẵn sàng phục vụ</div>';
+    // Determine areas to show based on area filter
+    const visibleAreas = currentAreaFilter === 'all' 
+        ? allAreasList 
+        : allAreasList.filter(a => String(a.id) === String(currentAreaFilter));
 
-        if (t.status === 'occupied') {
-            statusBadge = '<span class="badge badge-danger">Có khách</span>';
-            const orderInfo = t.current_order;
-            if (orderInfo) {
-                detailHtml = `
-                    <div class="table-card-bill">${formatVND(orderInfo.total)}</div>
-                    <div class="table-card-time"><i class="far fa-clock"></i> Giờ vào: ${orderInfo.created_at} (${orderInfo.items_count} món)</div>
-                `;
-            } else {
-                detailHtml = `<div class="table-card-time"><i class="fas fa-user-check"></i> Đang phục vụ</div>`;
-            }
-        } else if (t.status === 'reserved') {
-            statusBadge = '<span class="badge badge-warning">Đã đặt</span>';
-            detailHtml = `<div class="table-card-time" style="color: var(--warning);"><i class="fas fa-bookmark"></i> Bàn đã giữ chỗ</div>`;
-        }
+    let html = '';
 
-        return `
-            <div class="table-card status-${t.status}" onclick="openTableDetails(${t.id})">
-                <div class="table-card-header">
-                    <span class="table-card-num">${t.number}</span>
-                    ${statusBadge}
+    visibleAreas.forEach(area => {
+        // Tables belonging to this area
+        const tablesInArea = allTablesList.filter(t => {
+            if (t.area_id) return String(t.area_id) === String(area.id);
+            if (t.floor) return String(t.floor) === String(area.id);
+            return false;
+        });
+
+        // Filter by status
+        const filteredTables = tablesInArea.filter(t => {
+            if (currentStatusFilter === 'all') return true;
+            if (currentStatusFilter === 'empty') return t.status === 'empty' || !t.status;
+            return t.status === currentStatusFilter;
+        });
+
+        // Count per status in this area
+        const countEmpty = tablesInArea.filter(t => t.status === 'empty' || !t.status).length;
+        const countOccupied = tablesInArea.filter(t => t.status === 'occupied').length;
+        const countReserved = tablesInArea.filter(t => t.status === 'reserved').length;
+
+        html += `
+            <div class="area-section-card" id="area-card-${area.id}">
+                <div class="area-section-header">
+                    <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                        <span style="font-size: 17px; font-weight: 700; color: var(--primary-gold);">
+                            <i class="fas fa-map-marker-alt"></i> ${escapeHtml(area.name)}
+                        </span>
+                        <span class="badge badge-gold" style="font-size: 11px;">${tablesInArea.length} bàn</span>
+                        <div style="display: flex; gap: 6px; font-size: 12px; color: var(--text-muted);">
+                            <span>(<span style="color:var(--success);">${countEmpty} trống</span>, 
+                            <span style="color:var(--danger);">${countOccupied} có khách</span>, 
+                            <span style="color:var(--warning);">${countReserved} đặt trước</span>)</span>
+                        </div>
+                        ${area.description ? `<span style="font-size: 12px; color: var(--text-secondary); font-style: italic;">— ${escapeHtml(area.description)}</span>` : ''}
+                    </div>
+
+                    <!-- Action inside area: Tạo bàn mới trong khu vực này -->
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <button class="btn btn-primary btn-sm" onclick="openAddTableModal(${area.id}, '${escapeHtml(area.name)}')">
+                            <i class="fas fa-plus"></i> Tạo bàn
+                        </button>
+                        <button class="btn btn-secondary btn-sm" onclick="openEditAreaModal(${area.id}, '${escapeHtml(area.name)}', '${escapeHtml(area.description || '')}')" title="Sửa tên khu vực">
+                            <i class="fas fa-pen"></i>
+                        </button>
+                        <button class="btn btn-danger btn-sm" onclick="confirmDeleteArea(${area.id}, '${escapeHtml(area.name)}')" title="Xóa khu vực">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
                 </div>
-                <div class="table-card-details">
-                    ${detailHtml}
-                </div>
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px; border-top: 1px solid rgba(255, 255, 255, 0.05); padding-top: 8px;">
-                    <span class="table-card-capacity"><i class="fas fa-user"></i> ${t.capacity} chỗ</span>
-                    <span style="font-size: 11px; color: var(--primary-gold);"><i class="fas fa-circle-dot"></i> Hoạt động</span>
+
+                <!-- Tables Grid of this area -->
+                <div class="tables-grid">
+                    ${filteredTables.length > 0 ? filteredTables.map(t => renderTableCardHtml(t)).join('') : `
+                        <div style="grid-column: 1 / -1; text-align: center; color: var(--text-muted); padding: 30px; background: var(--bg-surface); border-radius: var(--radius-sm); border: 1px dashed var(--border-subtle);">
+                            <i class="fas fa-couch" style="opacity: 0.3; margin-bottom: 6px;"></i>
+                            <p style="font-size: 13px; margin: 0;">${tablesInArea.length === 0 ? 'Khu vực này chưa có bàn nào. Nhấn "+ Tạo bàn" để thêm bàn.' : 'Không có bàn nào phù hợp trạng thái đang lọc.'}</p>
+                        </div>
+                    `}
                 </div>
             </div>
         `;
-    }).join('');
+    });
+
+    // Check if there are tables with no matching area
+    const unassignedTables = allTablesList.filter(t => {
+        if (!t.area_id && !t.floor) return true;
+        const exists = allAreasList.some(a => String(a.id) === String(t.area_id) || String(a.id) === String(t.floor));
+        return !exists;
+    });
+
+    if (unassignedTables.length > 0 && currentAreaFilter === 'all') {
+        const filteredUnassigned = unassignedTables.filter(t => {
+            if (currentStatusFilter === 'all') return true;
+            if (currentStatusFilter === 'empty') return t.status === 'empty' || !t.status;
+            return t.status === currentStatusFilter;
+        });
+
+        html += `
+            <div class="area-section-card">
+                <div class="area-section-header">
+                    <span style="font-size: 17px; font-weight: 700; color: var(--text-secondary);">
+                        <i class="fas fa-layer-group"></i> Khu vực khác (${unassignedTables.length} bàn)
+                    </span>
+                </div>
+                <div class="tables-grid">
+                    ${filteredUnassigned.map(t => renderTableCardHtml(t)).join('')}
+                </div>
+            </div>
+        `;
+    }
+
+    container.innerHTML = html;
 }
 
-// Open Table Details Modal
+// ── Render Single Table Card HTML ──
+function renderTableCardHtml(t) {
+    let statusBadge = '<span class="badge badge-success">Trống</span>';
+    let detailHtml = '<div class="table-card-time"><i class="fas fa-check"></i> Sẵn sàng phục vụ</div>';
+
+    if (t.status === 'occupied') {
+        statusBadge = '<span class="badge badge-danger">Có khách</span>';
+        const orderInfo = t.current_order;
+        if (orderInfo) {
+            detailHtml = `
+                <div class="table-card-bill">${formatVND(orderInfo.total)}</div>
+                <div class="table-card-time"><i class="far fa-clock"></i> Giờ vào: ${orderInfo.created_at} (${orderInfo.items_count} món)</div>
+            `;
+        } else {
+            detailHtml = `<div class="table-card-time"><i class="fas fa-user-check"></i> Đang phục vụ</div>`;
+        }
+    } else if (t.status === 'reserved') {
+        statusBadge = '<span class="badge badge-warning">Đã đặt</span>';
+        detailHtml = `<div class="table-card-time" style="color: var(--warning);"><i class="fas fa-bookmark"></i> Bàn đã giữ chỗ</div>`;
+    }
+
+    return `
+        <div class="table-card status-${t.status || 'empty'}" onclick="openTableDetails(${t.id})">
+            <div class="table-card-header">
+                <span class="table-card-num">${escapeHtml(t.number)}</span>
+                ${statusBadge}
+            </div>
+            <div class="table-card-details">
+                ${detailHtml}
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px; border-top: 1px solid rgba(255, 255, 255, 0.05); padding-top: 8px;">
+                <span style="font-size: 12px; color: var(--text-muted);"><i class="fas fa-map-pin"></i> ${escapeHtml(t.area_name || 'Chung')}</span>
+                <span style="font-size: 11px; color: var(--primary-gold);"><i class="fas fa-circle-dot"></i> Hoạt động</span>
+            </div>
+        </div>
+    `;
+}
+
+// ── Open Table Details Modal ──
 function openTableDetails(tableId) {
     const table = allTablesList.find(t => t.id === tableId);
     if (!table) return;
 
     currentSelectedTable = table;
-    document.getElementById('modal-table-title').innerHTML = `<i class="fas fa-couch"></i> ${table.number}`;
+    document.getElementById('modal-table-title').innerHTML = `<i class="fas fa-couch"></i> ${escapeHtml(table.number)}`;
 
     let statusText = 'Trống (Sẵn sàng)';
     if (table.status === 'occupied') statusText = 'Đang có khách ngồi';
@@ -240,12 +609,16 @@ function openTableDetails(tableId) {
 
     let html = `
         <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-            <span style="color: var(--text-muted);">Trạng thái hiện tại:</span>
-            <strong>${statusText}</strong>
+            <span style="color: var(--text-muted);">Tên bàn:</span>
+            <strong>${escapeHtml(table.number)}</strong>
         </div>
         <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-            <span style="color: var(--text-muted);">Sức chứa:</span>
-            <span>${table.capacity} người</span>
+            <span style="color: var(--text-muted);">Khu vực:</span>
+            <span style="color: var(--primary-gold);">${escapeHtml(table.area_name || 'Chung')}</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+            <span style="color: var(--text-muted);">Trạng thái hiện tại:</span>
+            <strong>${statusText}</strong>
         </div>
     `;
 
@@ -280,7 +653,7 @@ function openTableDetails(tableId) {
     openModal('table-action-modal');
 }
 
-// Quick Change Status
+// ── Quick Change Status ──
 async function quickChangeStatus(newStatus) {
     if (!currentSelectedTable) return;
     try {
@@ -290,7 +663,7 @@ async function quickChangeStatus(newStatus) {
         if (res.success) {
             showToast(`Đã chuyển trạng thái bàn ${currentSelectedTable.number}!`);
             closeModal('table-action-modal');
-            loadTables();
+            loadData();
         } else {
             showToast(res.message || 'Lỗi cập nhật trạng thái', 'error');
         }
@@ -299,28 +672,101 @@ async function quickChangeStatus(newStatus) {
     }
 }
 
-// Open Add Table Modal
-function openAddTableModal() {
-    document.getElementById('add-table-form').reset();
-    openModal('add-table-modal');
+// ── Area Management: Add, Edit, Delete ──
+function openAddAreaModal() {
+    document.getElementById('add-area-form').reset();
+    openModal('add-area-modal');
+    setTimeout(() => document.getElementById('add-area-name').focus(), 100);
 }
 
-// Submit Add Table
-async function submitAddTable(e) {
+async function submitAddArea(e) {
     e.preventDefault();
-    const payload = {
-        number: document.getElementById('add-table-number').value.trim(),
-        floor: 1,
-        capacity: document.getElementById('add-table-capacity').value,
-        status: document.getElementById('add-table-status').value
-    };
+    const name = document.getElementById('add-area-name').value.trim();
+    const desc = document.getElementById('add-area-desc').value.trim();
+    if (!name) return;
 
     try {
-        const res = await apiCall('/api/tables', 'POST', payload);
+        const res = await apiCall('/api/areas', 'POST', { name, description: desc });
         if (res.success) {
-            showToast('Thêm bàn mới thành công!');
+            showToast(`Tạo khu vực "${name}" thành công!`);
+            closeModal('add-area-modal');
+            loadData();
+        } else {
+            showToast(res.message || 'Không thể tạo khu vực', 'error');
+        }
+    } catch (e) {
+        showToast('Lỗi kết nối khi tạo khu vực', 'error');
+    }
+}
+
+function openEditAreaModal(id, name, desc) {
+    document.getElementById('edit-area-id').value = id;
+    document.getElementById('edit-area-name').value = name;
+    document.getElementById('edit-area-desc').value = desc || '';
+    openModal('edit-area-modal');
+}
+
+async function submitEditArea(e) {
+    e.preventDefault();
+    const id = document.getElementById('edit-area-id').value;
+    const name = document.getElementById('edit-area-name').value.trim();
+    const desc = document.getElementById('edit-area-desc').value.trim();
+
+    try {
+        const res = await apiCall(`/api/areas/${id}`, 'PUT', { name, description: desc });
+        if (res.success) {
+            showToast('Cập nhật khu vực thành công!');
+            closeModal('edit-area-modal');
+            loadData();
+        } else {
+            showToast(res.message || 'Không thể cập nhật khu vực', 'error');
+        }
+    } catch (e) {
+        showToast('Lỗi khi sửa khu vực', 'error');
+    }
+}
+
+function confirmDeleteArea(id, name) {
+    showConfirm('Xác nhận xóa khu vực', `Bạn có chắc muốn xóa khu vực "${name}"? Các bàn trong khu vực này cũng sẽ bị xóa.`, async () => {
+        try {
+            const res = await apiCall(`/api/areas/${id}`, 'DELETE');
+            if (res.success) {
+                showToast('Đã xóa khu vực thành công!');
+                loadData();
+            } else {
+                showToast(res.message || 'Không thể xóa khu vực!', 'error');
+            }
+        } catch (e) {
+            showToast('Lỗi khi xóa khu vực', 'error');
+        }
+    });
+}
+
+// ── Table Management: Add Table inside Area ──
+// Đã bỏ mục sức chứa và trạng thái, chỉ giữ lại mục tên theo đúng yêu cầu
+function openAddTableModal(areaId, areaName) {
+    document.getElementById('add-table-form').reset();
+    document.getElementById('add-table-area-id').value = areaId;
+    document.getElementById('add-table-area-label').innerHTML = `<i class="fas fa-map-marker-alt"></i> ${escapeHtml(areaName)}`;
+    openModal('add-table-modal');
+    setTimeout(() => document.getElementById('add-table-number').focus(), 100);
+}
+
+async function submitAddTable(e) {
+    e.preventDefault();
+    const number = document.getElementById('add-table-number').value.trim();
+    const areaId = document.getElementById('add-table-area-id').value;
+    if (!number) return;
+
+    try {
+        const res = await apiCall('/api/tables', 'POST', {
+            number: number,
+            area_id: areaId
+        });
+        if (res.success) {
+            showToast(`Tạo bàn "${number}" thành công!`);
             closeModal('add-table-modal');
-            loadTables();
+            loadData();
         } else {
             showToast(res.message || 'Không thể thêm bàn', 'error');
         }
@@ -329,36 +775,43 @@ async function submitAddTable(e) {
     }
 }
 
-// Open Edit Table Modal
+// ── Edit Table Modal ──
 function openEditTableModal() {
     if (!currentSelectedTable) return;
     closeModal('table-action-modal');
 
     document.getElementById('edit-table-id').value = currentSelectedTable.id;
     document.getElementById('edit-table-number').value = currentSelectedTable.number;
-    document.getElementById('edit-table-capacity').value = currentSelectedTable.capacity;
-    document.getElementById('edit-table-status').value = currentSelectedTable.status;
+    document.getElementById('edit-table-status').value = currentSelectedTable.status || 'empty';
+
+    // Populate area selector
+    const areaSelect = document.getElementById('edit-table-area-id');
+    areaSelect.innerHTML = allAreasList.map(a => `
+        <option value="${a.id}" ${String(a.id) === String(currentSelectedTable.area_id) ? 'selected' : ''}>
+            ${escapeHtml(a.name)}
+        </option>
+    `).join('');
 
     openModal('edit-table-modal');
 }
 
-// Submit Edit Table
 async function submitEditTable(e) {
     e.preventDefault();
     const id = document.getElementById('edit-table-id').value;
-    const payload = {
-        number: document.getElementById('edit-table-number').value.trim(),
-        floor: currentSelectedTable.floor || 1,
-        capacity: document.getElementById('edit-table-capacity').value,
-        status: document.getElementById('edit-table-status').value
-    };
+    const number = document.getElementById('edit-table-number').value.trim();
+    const areaId = document.getElementById('edit-table-area-id').value;
+    const status = document.getElementById('edit-table-status').value;
 
     try {
-        const res = await apiCall(`/api/tables/${id}`, 'PUT', payload);
+        const res = await apiCall(`/api/tables/${id}`, 'PUT', {
+            number: number,
+            area_id: areaId,
+            status: status
+        });
         if (res.success) {
             showToast('Cập nhật thông tin bàn thành công!');
             closeModal('edit-table-modal');
-            loadTables();
+            loadData();
         } else {
             showToast(res.message || 'Lỗi cập nhật', 'error');
         }
@@ -367,7 +820,7 @@ async function submitEditTable(e) {
     }
 }
 
-// Delete Table
+// ── Delete Table ──
 function confirmDeleteCurrentTable() {
     if (!currentSelectedTable) return;
     closeModal('table-action-modal');
@@ -377,7 +830,7 @@ function confirmDeleteCurrentTable() {
             const res = await apiCall(`/api/tables/${currentSelectedTable.id}`, 'DELETE');
             if (res.success) {
                 showToast('Đã xóa bàn thành công!');
-                loadTables();
+                loadData();
             } else {
                 showToast(res.message || 'Không thể xóa bàn!', 'error');
             }
@@ -387,6 +840,23 @@ function confirmDeleteCurrentTable() {
     });
 }
 
-document.addEventListener('DOMContentLoaded', loadTables);
+// ── Keyboard Shortcuts (Phím tắt nhanh kiểm tra trạng thái bàn) ──
+document.addEventListener('keydown', (e) => {
+    // Không bắt phím tắt khi người dùng đang nhập liệu trong ô input/textarea
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+    if (e.key === '1' || e.key.toLowerCase() === 'a') {
+        setQuickStatusFilter('all');
+    } else if (e.key === '2' || e.key.toLowerCase() === 'k' || e.key.toLowerCase() === 'c') {
+        setQuickStatusFilter('occupied');
+    } else if (e.key === '3' || e.key.toLowerCase() === 'd') {
+        setQuickStatusFilter('reserved');
+    } else if (e.key === '4' || e.key.toLowerCase() === 't') {
+        setQuickStatusFilter('empty');
+    }
+});
+
+document.addEventListener('DOMContentLoaded', loadData);
 </script>
 {% endblock %}

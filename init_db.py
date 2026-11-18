@@ -3,7 +3,7 @@ import random
 from models import (
     db, Category, MenuItem, Table, Staff, 
     Order, OrderItem, Payment, Voucher, 
-    Ingredient, MenuIngredient
+    Ingredient, MenuIngredient, Area
 )
 
 def init_database(app=None):
@@ -78,28 +78,33 @@ def init_database(app=None):
     db.session.commit()
     print("[OK] Menu items created (19 items)")
 
-    # 3. Tables (10 tables, 2 floors)
+    # 3. Areas & Tables
+    area1 = Area(name="Tầng 1", description="Khu vực tầng trệt")
+    area2 = Area(name="Tầng 2", description="Khu vực tầng 2 thoáng mát")
+    db.session.add_all([area1, area2])
+    db.session.commit()
+
     tables_data = [
         # Tầng 1
-        ("Bàn 01", 4, "empty", 1),
-        ("Bàn 02", 2, "occupied", 1),
-        ("Bàn 03", 4, "empty", 1),
-        ("Bàn 04", 6, "reserved", 1),
-        ("Bàn 05", 4, "empty", 1),
+        ("Bàn 01", 4, "empty", 1, area1.id, "Tầng 1"),
+        ("Bàn 02", 2, "occupied", 1, area1.id, "Tầng 1"),
+        ("Bàn 03", 4, "empty", 1, area1.id, "Tầng 1"),
+        ("Bàn 04", 6, "reserved", 1, area1.id, "Tầng 1"),
+        ("Bàn 05", 4, "empty", 1, area1.id, "Tầng 1"),
         # Tầng 2
-        ("Bàn 06", 4, "empty", 2),
-        ("Bàn 07", 8, "occupied", 2),
-        ("Bàn 08", 2, "empty", 2),
-        ("Bàn 09", 4, "reserved", 2),
-        ("Bàn 10", 6, "empty", 2)
+        ("Bàn 06", 4, "empty", 2, area2.id, "Tầng 2"),
+        ("Bàn 07", 8, "occupied", 2, area2.id, "Tầng 2"),
+        ("Bàn 08", 2, "empty", 2, area2.id, "Tầng 2"),
+        ("Bàn 09", 4, "reserved", 2, area2.id, "Tầng 2"),
+        ("Bàn 10", 6, "empty", 2, area2.id, "Tầng 2")
     ]
     table_objs = {}
-    for num, cap, status, floor in tables_data:
-        t = Table(number=num, capacity=cap, status=status, floor=floor)
+    for num, cap, status, floor, aid, aname in tables_data:
+        t = Table(number=num, capacity=cap, status=status, floor=floor, area_id=aid, area_name=aname)
         db.session.add(t)
         table_objs[num] = t
     db.session.commit()
-    print("[OK] Tables created (10 tables)")
+    print("[OK] Areas & Tables created (2 areas, 10 tables)")
 
     # 4. Staff members (5 staff)
     staff_data = [
