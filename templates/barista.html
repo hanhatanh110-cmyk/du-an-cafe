@@ -193,7 +193,31 @@
 <script>
 let pendingItems = [];
 let selectedItemIds = new Set();
-let completedLocalIds = new Set();
+
+function loadStoredDoneIds() {
+    try {
+        const raw = sessionStorage.getItem('cafe_barista_done_ids');
+        if (raw) {
+            const arr = JSON.parse(raw);
+            const s = new Set();
+            arr.forEach(x => { s.add(x); s.add(Number(x)); s.add(String(x)); });
+            return s;
+        }
+    } catch(e) {}
+    return new Set();
+}
+
+let completedLocalIds = loadStoredDoneIds();
+
+function persistDoneId(id) {
+    completedLocalIds.add(id);
+    completedLocalIds.add(Number(id));
+    completedLocalIds.add(String(id));
+    try {
+        sessionStorage.setItem('cafe_barista_done_ids', JSON.stringify(Array.from(completedLocalIds)));
+    } catch(e) {}
+}
+
 let currentCategory = 'all';
 let currentViewMode = 'table'; // 'table' or 'item'
 let refreshInterval = null;
@@ -391,8 +415,8 @@ function renderTableView(items) {
                         ${it.category ? `<span class="badge badge-gold" style="font-size:10px;margin-left:6px;">${it.category}</span>` : ''}
                         ${it.notes ? `<div style="font-size:12px;color:var(--warning);margin-top:2px;"><i class="fas fa-comment-dots"></i> ${it.notes}</div>` : ''}
                     </div>
-                    <button class="btn btn-secondary btn-sm" onclick="completeSingleItem(${it.order_item_id})" title="Đã xong món này">
-                        <i class="fas fa-check"></i>
+                    <button class="btn btn-success btn-sm" onclick="completeSingleItem(${it.order_item_id})" style="background:var(--success);color:#fff;border:none;padding:6px 12px;font-weight:600;font-size:12px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;border-radius:var(--radius-sm);" title="Hoàn thành món này">
+                        <i class="fas fa-check"></i> Hoàn thành
                     </button>
                 </div>
             `;
@@ -498,164 +522,87 @@ function clearSelectedItems() {
     renderView();
 }
 
-// Animation helper to make elements vanish immediately
-function animateAndRemoveRow(rowEl, callback) {
-    if (!rowEl) {
-        if (callback) callback();
-        return;
-    }
-    rowEl.style.transition = 'all 0.25s ease-out';
-    rowEl.style.opacity = '0';
-    rowEl.style.transform = 'translateX(40px)';
-    rowEl.style.maxHeight = '0';
-    rowEl.style.paddingTop = '0';
-    rowEl.style.paddingBottom = '0';
-    rowEl.style.marginTop = '0';
-    rowEl.style.marginBottom = '0';
-    rowEl.style.overflow = 'hidden';
-    setTimeout(() => {
-        if (rowEl && rowEl.parentNode) rowEl.remove();
-        if (callback) callback();
-    }, 250);
-}
-
-function animateAndRemoveCard(cardEl, callback) {
-    if (!cardEl) {
-        if (callback) callback();
-        return;
-    }
-    cardEl.style.transition = 'all 0.28s ease-out';
-    cardEl.style.opacity = '0';
-    cardEl.style.transform = 'scale(0.92)';
-    setTimeout(() => {
-        if (cardEl && cardEl.parentNode) cardEl.remove();
-        if (callback) callback();
-    }, 280);
-}
-
 async function completeSelectedItems() {
     if (selectedItemIds.size === 0) return;
     const ids = Array.from(selectedItemIds);
-    ids.forEach(id => {
-        completedLocalIds.add(id);
-        completedLocalIds.add(Number(id));
-        completedLocalIds.add(String(id));
-    });
+    ids.forEach(id => persistDoneId(id));
     selectedItemIds.clear();
     updateBatchToolbar();
 
-    // Loại bỏ khỏi pendingItems
+    // Loại bỏ ngay khỏi pendingItems
     const idsStr = ids.map(x => String(x));
     pendingItems = pendingItems.filter(i => !idsStr.includes(String(i.order_item_id)));
+
+    // Biến mất tức thì 100% bằng cách vẽ lại ngay lập tức
     renderCategoryPills();
+    renderView();
 
-    // Biến mất tức thì các dòng đã chọn
-    ids.forEach(id => {
-        const rowEl = document.getElementById(`row-item-${id}`);
-        if (rowEl) {
-            const parentBody = rowEl.closest('.barista-order-body');
-            const orderCard = rowEl.closest('.barista-order-card');
-            animateAndRemoveRow(rowEl, () => {
-                if (parentBody && parentBody.querySelectorAll('.barista-item-row').length === 0) {
-                    animateAndRemoveCard(orderCard);
-                }
-            });
-        }
-    });
-
-    if (pendingItems.length === 0) {
-        setTimeout(() => {
-            const emptyDiv = document.getElementById('empty-queue');
-            if (emptyDiv) emptyDiv.style.display = 'block';
-        }, 300);
-    }
+    showToast(`Đã hoàn thành ${ids.length} món đồ uống!`);
 
     try {
         await apiCall('/api/barista/complete-items', 'POST', { item_ids: ids.map(x => Number(x)), note: `Hoàn tất ${ids.length} món` });
     } catch(e) {
         console.error('Lỗi hoàn tất món đã chọn:', e);
     }
-
-    showToast(`Đã hoàn thành ${ids.length} món đồ uống!`);
 }
 
 async function completeSingleItem(orderItemId) {
     const idNum = Number(orderItemId);
     const idStr = String(orderItemId);
-    completedLocalIds.add(idNum);
-    completedLocalIds.add(idStr);
+
+    // 1. Lưu id vào bộ nhớ và sessionStorage để không bao giờ hiện lại
+    persistDoneId(idNum);
     selectedItemIds.delete(idNum);
     selectedItemIds.delete(idStr);
     updateBatchToolbar();
 
-    // 1. Biến mất tức thì phần tử dòng của món này
-    const rowEl = document.getElementById(`row-item-${orderItemId}`);
-    const parentBody = rowEl ? rowEl.closest('.barista-order-body') : null;
-    const orderCard = rowEl ? rowEl.closest('.barista-order-card') : null;
-
-    // Loại bỏ khỏi danh sách pendingItems
+    // 2. Loại bỏ ngay lập tức món này khỏi danh sách pendingItems
     pendingItems = pendingItems.filter(i => String(i.order_item_id) !== idStr);
+
+    // 3. Vẽ lại giao diện NGAY LẬP TỨC (Món biến mất ngay tức thì 0ms!)
     renderCategoryPills();
+    renderView();
 
-    animateAndRemoveRow(rowEl, () => {
-        // Kiểm tra xem thẻ bàn này còn món nào khác đang chờ không
-        if (parentBody && parentBody.querySelectorAll('.barista-item-row').length === 0) {
-            animateAndRemoveCard(orderCard, () => {
-                if (pendingItems.length === 0) {
-                    const emptyDiv = document.getElementById('empty-queue');
-                    if (emptyDiv) emptyDiv.style.display = 'block';
-                }
-            });
-        } else if (pendingItems.length === 0) {
-            const emptyDiv = document.getElementById('empty-queue');
-            if (emptyDiv) emptyDiv.style.display = 'block';
-        }
-    });
+    showToast('Đã đánh dấu hoàn thành món!');
 
+    // 4. Đồng bộ ngầm với máy chủ
     try {
         await apiCall('/api/barista/complete-items', 'POST', { item_ids: [idNum], note: 'Hoàn tất 1 món' });
     } catch(e) {
         console.error('Lỗi hoàn tất món:', e);
     }
-
-    showToast('Đã đánh dấu hoàn thành món!');
 }
 
 async function completeWholeOrder(orderId) {
     const idStr = String(orderId);
+    const idNum = Number(orderId);
     const orderItems = pendingItems.filter(i => String(i.order_id) === idStr);
     const itemIds = orderItems.map(i => i.order_item_id);
 
+    // Lưu toàn bộ id món vào danh sách đã xong
     itemIds.forEach(id => {
-        completedLocalIds.add(id);
-        completedLocalIds.add(Number(id));
-        completedLocalIds.add(String(id));
+        persistDoneId(id);
         selectedItemIds.delete(id);
         selectedItemIds.delete(Number(id));
         selectedItemIds.delete(String(id));
     });
     updateBatchToolbar();
 
-    // Loại bỏ ngay toàn bộ bàn này khỏi danh sách
+    // Loại bỏ ngay toàn bộ bàn này khỏi pendingItems
     pendingItems = pendingItems.filter(i => String(i.order_id) !== idStr);
+
+    // Vẽ lại giao diện NGAY LẬP TỨC (Toàn bộ bàn biến mất ngay tức thì 0ms!)
     renderCategoryPills();
+    renderView();
 
-    // Biến mất tức thì thẻ bàn này
-    const cardEl = document.getElementById(`card-order-${orderId}`);
-    animateAndRemoveCard(cardEl, () => {
-        if (pendingItems.length === 0) {
-            const emptyDiv = document.getElementById('empty-queue');
-            if (emptyDiv) emptyDiv.style.display = 'block';
-        }
-    });
+    showToast(`Đã hoàn tất toàn bộ đồ uống cho đơn #${orderId}!`);
 
+    // Đồng bộ ngầm với máy chủ
     try {
-        await apiCall('/api/barista/complete-items', 'POST', { order_ids: [Number(orderId)], item_ids: itemIds.map(x => Number(x)), note: 'Hoàn tất toàn bộ bàn' });
+        await apiCall('/api/barista/complete-items', 'POST', { order_ids: [idNum], item_ids: itemIds.map(x => Number(x)), note: 'Hoàn tất toàn bộ bàn' });
     } catch(e) {
         console.error('Lỗi hoàn tất bàn:', e);
     }
-
-    showToast(`Đã hoàn tất toàn bộ đồ uống cho đơn #${orderId}!`);
 }
 
 async function completeBatchQty(itemName, elementId) {
@@ -667,9 +614,7 @@ async function completeBatchQty(itemName, elementId) {
 
     for (const item of pendingItems) {
         if (item.item_name === itemName && remaining > 0) {
-            completedLocalIds.add(item.order_item_id);
-            completedLocalIds.add(Number(item.order_item_id));
-            completedLocalIds.add(String(item.order_item_id));
+            persistDoneId(item.order_item_id);
             completedIds.push(item.order_item_id);
             remaining -= item.quantity;
         }
@@ -681,11 +626,11 @@ async function completeBatchQty(itemName, elementId) {
     renderCategoryPills();
     renderView();
 
+    showToast(`Đã làm xong ${qtyToComplete} ly ${itemName}!`);
+
     try {
         await apiCall('/api/barista/complete-items', 'POST', { item_ids: completedIds.map(x => Number(x)), note: `Làm xong ${qtyToComplete} ly ${itemName}` });
     } catch(e) {}
-
-    showToast(`Đã làm xong ${qtyToComplete} ly ${itemName}!`);
 }
 
 // ── Auto Refresh Management ──

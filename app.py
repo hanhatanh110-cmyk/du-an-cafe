@@ -319,40 +319,50 @@ def get_barista_pending():
 
 @app.route('/api/barista/complete-items', methods=['POST'])
 def barista_complete_items():
-    u = get_current_user()
-    data = request.json or {}
-    raw_item_ids = data.get('item_ids', [])
-    raw_order_ids = data.get('order_ids', [])
-    item_ids = [int(x) for x in raw_item_ids if str(x).isdigit()]
-    order_ids = [int(x) for x in raw_order_ids if str(x).isdigit()]
-    note = data.get('note', 'Pha chế hoàn tất')
-    affected_orders = set(order_ids)
-    
-    if item_ids:
-        items = OrderItem.query.filter(OrderItem.id.in_(item_ids)).all()
-        for it in items:
-            it.status = 'done'
-            affected_orders.add(it.order_id)
-            db.session.add(it)
-            
-    if order_ids:
-        items_in_orders = OrderItem.query.filter(OrderItem.order_id.in_(order_ids)).all()
-        for it in items_in_orders:
-            it.status = 'done'
-            db.session.add(it)
-            
-    for oid in affected_orders:
-        h = OrderHistory(
-            order_id=oid,
-            action='item_changed',
-            description=f'Pha chế: {note}',
-            performed_by=u.id if u else None,
-            performed_by_name=u.full_name if u else 'Pha chế',
-            created_at=datetime.now()
-        )
-        db.session.add(h)
-    db.session.commit()
-    return jsonify({'success': True, 'message': 'Đã cập nhật trạng thái pha chế!'})
+    try:
+        u = get_current_user()
+        data = request.json or {}
+        raw_item_ids = data.get('item_ids', [])
+        raw_order_ids = data.get('order_ids', [])
+        item_ids = [int(x) for x in raw_item_ids if str(x).isdigit()]
+        order_ids = [int(x) for x in raw_order_ids if str(x).isdigit()]
+        note = data.get('note', 'Pha chế hoàn tất')
+        affected_orders = set(order_ids)
+        
+        if item_ids:
+            items = OrderItem.query.filter(OrderItem.id.in_(item_ids)).all()
+            for it in items:
+                it.status = 'done'
+                if it.order_id:
+                    affected_orders.add(it.order_id)
+                db.session.add(it)
+                
+        if order_ids:
+            items_in_orders = OrderItem.query.filter(OrderItem.order_id.in_(order_ids)).all()
+            for it in items_in_orders:
+                it.status = 'done'
+                db.session.add(it)
+                
+        for oid in affected_orders:
+            if not oid:
+                continue
+            try:
+                h = OrderHistory(
+                    order_id=oid,
+                    action='item_changed',
+                    description=f'Pha chế: {note}',
+                    performed_by=u.id if u else None,
+                    performed_by_name=u.full_name if u else 'Pha chế',
+                    created_at=datetime.now()
+                )
+                db.session.add(h)
+            except Exception:
+                pass
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Đã cập nhật trạng thái pha chế!'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 
