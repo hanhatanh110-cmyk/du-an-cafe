@@ -437,6 +437,50 @@ class SalaryRecord(db.Model):
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else ''
         }
 
+class Attendance(db.Model):
+    """Chấm công nhân viên"""
+    __tablename__ = 'attendance'
+
+    id = db.Column(db.Integer, primary_key=True)
+    staff_id = db.Column(db.Integer, db.ForeignKey('staff.id'), nullable=False)
+    date = db.Column(db.String(10), nullable=False)          # YYYY-MM-DD
+    check_in = db.Column(db.String(5), nullable=True)        # HH:MM
+    check_out = db.Column(db.String(5), nullable=True)        # HH:MM
+    status = db.Column(db.String(20), default='present')     # present, absent, late, half_day
+    note = db.Column(db.String(255), nullable=True)
+    recorded_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    staff = db.relationship('Staff', lazy=True)
+
+    def work_hours(self):
+        """Tính số giờ làm nếu có check_in và check_out"""
+        try:
+            if self.check_in and self.check_out:
+                h1, m1 = map(int, self.check_in.split(':'))
+                h2, m2 = map(int, self.check_out.split(':'))
+                total = (h2 * 60 + m2) - (h1 * 60 + m1)
+                return round(total / 60, 1) if total > 0 else 0
+        except Exception:
+            pass
+        return 0
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'staff_id': self.staff_id,
+            'staff_name': self.staff.name if self.staff else '',
+            'staff_role': self.staff.role if self.staff else '',
+            'date': self.date,
+            'check_in': self.check_in or '',
+            'check_out': self.check_out or '',
+            'status': self.status or 'present',
+            'note': self.note or '',
+            'work_hours': self.work_hours(),
+            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else ''
+        }
+
 class OrderHistory(db.Model):
     __tablename__ = 'order_history'
     id = db.Column(db.Integer, primary_key=True)

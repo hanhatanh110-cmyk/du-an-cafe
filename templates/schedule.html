@@ -1,58 +1,251 @@
 {% extends "base.html" %}
-{% block page_title %}Lịch làm việc{% endblock %}
-{% block page_subtitle %}Phân ca &amp; theo dõi lịch làm việc nhân viên{% endblock %}
+{% block page_title %}Ca làm &amp; Chấm công{% endblock %}
+{% block page_subtitle %}Phân ca làm việc, chấm công thời gian thực &amp; theo dõi chuyên cần nhân viên{% endblock %}
 
 {% block topbar_action %}
-<div id="topbar-schedule-actions">
-    <button class="btn btn-primary btn-sm" onclick="openAddShift()" id="btn-add-shift" style="display:none;">
-        <i class="fas fa-plus"></i> Thêm ca làm
-    </button>
+<div id="topbar-actions" style="display:flex;gap:10px;align-items:center;">
+    <!-- Actions for Schedule Tab -->
+    <div id="schedule-tab-actions" style="display:flex;gap:8px;">
+        <button class="btn btn-primary btn-sm" onclick="openAddShift()" id="btn-add-shift" style="display:none;">
+            <i class="fas fa-plus"></i> Thêm ca làm
+        </button>
+    </div>
+    <!-- Actions for Attendance Tab -->
+    <div id="attendance-tab-actions" style="display:none;gap:8px;">
+        <button class="btn btn-success btn-sm" onclick="openQuickAttendanceModal()">
+            <i class="fas fa-fingerprint"></i> Chấm công nhanh
+        </button>
+        <button class="btn btn-primary btn-sm" onclick="openAddAttendanceModal()" id="btn-add-attendance" style="display:none;">
+            <i class="fas fa-plus"></i> Ghi nhận chấm công
+        </button>
+    </div>
 </div>
 {% endblock %}
 
 {% block content %}
-<!-- Filter Card (collapsible) -->
-<div class="card" style="margin-bottom:16px;">
-    <div class="card-header" style="cursor:pointer;" onclick="togglePanel('schedule-filter-panel', this)">
-        <div class="card-title"><i class="fas fa-filter"></i> Bộ lọc &amp; Điều hướng</div>
-        <i class="fas fa-chevron-up panel-toggle-icon"></i>
+<!-- Tab Switcher Navigation -->
+<div style="display:flex;gap:12px;margin-bottom:20px;border-bottom:1px solid var(--border-subtle);padding-bottom:12px;">
+    <button class="tab-btn active" id="tab-btn-schedule" onclick="switchMainTab('schedule')">
+        <i class="fas fa-calendar-alt"></i> Lịch phân ca
+    </button>
+    <button class="tab-btn" id="tab-btn-attendance" onclick="switchMainTab('attendance')">
+        <i class="fas fa-user-clock"></i> Chấm công nhân viên
+    </button>
+</div>
+
+<!-- ============================================================== -->
+<!-- TAB 1: LỊCH PHÂN CA                                            -->
+<!-- ============================================================== -->
+<div id="view-schedule">
+    <!-- Filter Card (collapsible) -->
+    <div class="card" style="margin-bottom:16px;">
+        <div class="card-header" style="cursor:pointer;" onclick="togglePanel('schedule-filter-panel', this)">
+            <div class="card-title"><i class="fas fa-filter"></i> Bộ lọc &amp; Điều hướng lịch làm việc</div>
+            <i class="fas fa-chevron-up panel-toggle-icon"></i>
+        </div>
+        <div id="schedule-filter-panel" style="padding:16px 24px;display:flex;gap:16px;flex-wrap:wrap;align-items:center;">
+            <div>
+                <label class="form-label">Tháng</label>
+                <input type="month" id="schedule-month" class="form-control" style="width:160px;" onchange="loadSchedule()">
+            </div>
+            <div>
+                <label class="form-label">Nhân viên</label>
+                <select id="schedule-staff-filter" class="form-select" style="width:180px;" onchange="loadSchedule()">
+                    <option value="">Tất cả nhân viên</option>
+                </select>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:18px;">
+                <span class="badge" style="background:#1a4a8a;color:#fff;padding:4px 10px;">🌅 Sáng (6h-14h)</span>
+                <span class="badge" style="background:#7a4000;color:#fff;padding:4px 10px;">☀️ Chiều (14h-22h)</span>
+                <span class="badge" style="background:#3d1a6e;color:#fff;padding:4px 10px;">🌙 Tối (18h-24h)</span>
+                <span class="badge" style="background:#1a5c2a;color:#fff;padding:4px 10px;">📅 Cả ngày</span>
+                <span class="badge" style="background:#333;color:#aaa;padding:4px 10px;">🔴 Nghỉ</span>
+            </div>
+        </div>
     </div>
-    <div id="schedule-filter-panel" style="padding:16px 24px;display:flex;gap:16px;flex-wrap:wrap;align-items:center;">
-        <div>
-            <label class="form-label">Tháng</label>
-            <input type="month" id="schedule-month" class="form-control" style="width:160px;" onchange="loadSchedule()">
+
+    <!-- Calendar Grid -->
+    <div class="card">
+        <div class="card-header">
+            <div class="card-title"><i class="fas fa-calendar-alt"></i> <span id="cal-title">Lịch tháng</span></div>
+            <div style="display:flex;gap:8px;">
+                <button class="btn btn-secondary btn-sm" onclick="prevMonth()"><i class="fas fa-chevron-left"></i></button>
+                <button class="btn btn-secondary btn-sm" onclick="nextMonth()"><i class="fas fa-chevron-right"></i></button>
+            </div>
         </div>
-        <div>
-            <label class="form-label">Nhân viên</label>
-            <select id="schedule-staff-filter" class="form-select" style="width:180px;" onchange="loadSchedule()">
-                <option value="">Tất cả nhân viên</option>
-            </select>
-        </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:18px;">
-            <span class="badge" style="background:#1a4a8a;color:#fff;padding:4px 10px;">🌅 Sáng</span>
-            <span class="badge" style="background:#7a4000;color:#fff;padding:4px 10px;">☀️ Chiều</span>
-            <span class="badge" style="background:#3d1a6e;color:#fff;padding:4px 10px;">🌙 Tối</span>
-            <span class="badge" style="background:#1a5c2a;color:#fff;padding:4px 10px;">📅 Cả ngày</span>
-            <span class="badge" style="background:#333;color:#aaa;padding:4px 10px;">🔴 Nghỉ</span>
+        <div style="overflow-x:auto;padding:16px;">
+            <div id="schedule-grid"></div>
         </div>
     </div>
 </div>
 
-<!-- Calendar Grid -->
-<div class="card">
-    <div class="card-header">
-        <div class="card-title"><i class="fas fa-calendar-alt"></i> <span id="cal-title">Lịch tháng</span></div>
-        <div style="display:flex;gap:8px;">
-            <button class="btn btn-secondary btn-sm" onclick="prevMonth()"><i class="fas fa-chevron-left"></i></button>
-            <button class="btn btn-secondary btn-sm" onclick="nextMonth()"><i class="fas fa-chevron-right"></i></button>
+<!-- ============================================================== -->
+<!-- TAB 2: CHẤM CÔNG NHÂN VIÊN                                     -->
+<!-- ============================================================== -->
+<div id="view-attendance" style="display:none;">
+    <!-- Quick Timekeeping Widget (Chấm công 1 chạm) -->
+    <div class="card" style="margin-bottom:20px;border-left:4px solid var(--primary-gold);">
+        <div style="padding:18px 24px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;">
+                <div style="display:flex;align-items:center;gap:16px;">
+                    <div style="width:48px;height:48px;border-radius:50%;background:rgba(200,169,126,0.15);display:flex;align-items:center;justify-content:center;color:var(--primary-gold);font-size:22px;">
+                        <i class="fas fa-fingerprint"></i>
+                    </div>
+                    <div>
+                        <div style="font-weight:700;font-size:16px;color:var(--text-primary);display:flex;align-items:center;gap:10px;">
+                            <span>Chấm công nhanh hôm nay</span>
+                            <span id="live-clock" style="font-family:monospace;background:var(--bg-surface);padding:3px 10px;border-radius:var(--radius-sm);border:1px solid var(--border-subtle);font-size:13px;color:var(--primary-gold);">--:--:--</span>
+                        </div>
+                        <div id="live-date" style="font-size:12px;color:var(--text-muted);margin-top:2px;">Hôm nay</div>
+                    </div>
+                </div>
+
+                <!-- Quick Check Form -->
+                <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+                    <div style="min-width:180px;">
+                        <select id="quick-staff-select" class="form-select form-select-sm" onchange="checkQuickStaffStatus()">
+                            <!-- Staff list -->
+                        </select>
+                    </div>
+                    <div style="min-width:140px;">
+                        <input type="text" id="quick-note" class="form-control form-control-sm" placeholder="Ghi chú (tùy chọn)">
+                    </div>
+                    <button class="btn btn-success btn-sm" onclick="triggerQuickCheck('check_in')" style="font-weight:600;">
+                        <i class="fas fa-sign-in-alt"></i> Vào ca
+                    </button>
+                    <button class="btn btn-danger btn-sm" onclick="triggerQuickCheck('check_out')" style="font-weight:600;">
+                        <i class="fas fa-sign-out-alt"></i> Ra ca
+                    </button>
+                </div>
+            </div>
+
+            <!-- Quick Status Badge for selected staff -->
+            <div id="quick-status-banner" style="margin-top:14px;padding:8px 14px;background:var(--bg-surface);border-radius:var(--radius-sm);font-size:12px;display:flex;align-items:center;gap:8px;">
+                <i class="fas fa-info-circle" style="color:var(--primary-gold);"></i>
+                <span id="quick-status-text">Đang kiểm tra trạng thái chấm công của nhân viên...</span>
+            </div>
         </div>
     </div>
-    <div style="overflow-x:auto;padding:16px;">
-        <div id="schedule-grid"></div>
+
+    <!-- Attendance Summary Statistics -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:14px;margin-bottom:20px;">
+        <div class="card" style="padding:14px 18px;margin-bottom:0;">
+            <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;">Tổng lượt chấm</div>
+            <div id="att-stat-total" style="font-size:22px;font-weight:800;color:var(--text-primary);">0</div>
+        </div>
+        <div class="card" style="padding:14px 18px;margin-bottom:0;">
+            <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;">Có mặt / Đúng giờ</div>
+            <div id="att-stat-present" style="font-size:22px;font-weight:800;color:var(--success);">0</div>
+        </div>
+        <div class="card" style="padding:14px 18px;margin-bottom:0;">
+            <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;">Đi trễ</div>
+            <div id="att-stat-late" style="font-size:22px;font-weight:800;color:var(--warning);">0</div>
+        </div>
+        <div class="card" style="padding:14px 18px;margin-bottom:0;">
+            <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;">Về sớm / Nửa ngày</div>
+            <div id="att-stat-early" style="font-size:22px;font-weight:800;color:#9b59b6;">0</div>
+        </div>
+        <div class="card" style="padding:14px 18px;margin-bottom:0;">
+            <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;">Vắng mặt</div>
+            <div id="att-stat-absent" style="font-size:22px;font-weight:800;color:var(--danger);">0</div>
+        </div>
+        <div class="card" style="padding:14px 18px;margin-bottom:0;">
+            <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;">Tổng giờ làm việc</div>
+            <div id="att-stat-hours" style="font-size:22px;font-weight:800;color:var(--primary-gold);">0h</div>
+        </div>
+    </div>
+
+    <!-- Attendance Filters -->
+    <div class="card" style="margin-bottom:20px;padding:16px 20px;">
+        <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;justify-content:space-between;">
+            <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+                <!-- Mode filter -->
+                <div>
+                    <label class="form-label" style="margin:0 0 4px 0;">Xem theo</label>
+                    <select id="att-view-mode" class="form-select form-select-sm" style="width:130px;" onchange="changeAttendanceViewMode()">
+                        <option value="today">Hôm nay</option>
+                        <option value="date">Theo ngày</option>
+                        <option value="month">Theo tháng</option>
+                    </select>
+                </div>
+                <!-- Date input -->
+                <div id="att-date-wrapper" style="display:none;">
+                    <label class="form-label" style="margin:0 0 4px 0;">Chọn ngày</label>
+                    <input type="date" id="att-filter-date" class="form-control form-control-sm" style="width:150px;" onchange="loadAttendance()">
+                </div>
+                <!-- Month input -->
+                <div id="att-month-wrapper" style="display:none;">
+                    <label class="form-label" style="margin:0 0 4px 0;">Chọn tháng</label>
+                    <input type="month" id="att-filter-month" class="form-control form-control-sm" style="width:150px;" onchange="loadAttendance()">
+                </div>
+                <!-- Staff filter -->
+                <div>
+                    <label class="form-label" style="margin:0 0 4px 0;">Nhân viên</label>
+                    <select id="att-staff-filter" class="form-select form-select-sm" style="width:180px;" onchange="loadAttendance()">
+                        <option value="">Tất cả nhân sự</option>
+                    </select>
+                </div>
+                <!-- Status filter -->
+                <div>
+                    <label class="form-label" style="margin:0 0 4px 0;">Trạng thái</label>
+                    <select id="att-status-filter" class="form-select form-select-sm" style="width:150px;" onchange="renderAttendanceTable()">
+                        <option value="all">Tất cả trạng thái</option>
+                        <option value="present">Đúng giờ / Có mặt</option>
+                        <option value="late">Đi trễ</option>
+                        <option value="early_leave">Về sớm</option>
+                        <option value="half_day">Nửa ngày</option>
+                        <option value="absent">Vắng mặt</option>
+                    </select>
+                </div>
+            </div>
+
+            <div style="display:flex;gap:8px;margin-top:18px;">
+                <button class="btn btn-secondary btn-sm" onclick="setAttendanceToday()">
+                    <i class="fas fa-calendar-day"></i> Về hôm nay
+                </button>
+                <button class="btn btn-secondary btn-sm" onclick="loadAttendance()">
+                    <i class="fas fa-sync-alt"></i> Làm mới
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Attendance Table Card -->
+    <div class="card">
+        <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+            <div class="card-title">
+                <i class="fas fa-clipboard-check"></i> <span id="att-table-title">Danh sách chấm công</span>
+            </div>
+            <span id="att-table-count" style="font-size:12px;color:var(--text-muted);">0 bản ghi</span>
+        </div>
+        <div style="overflow-x:auto;">
+            <table class="data-table" id="attendance-table" style="width:100%;border-collapse:collapse;">
+                <thead>
+                    <tr>
+                        <th style="padding:12px 16px;text-align:left;font-size:12px;color:var(--text-muted);border-bottom:1px solid var(--border-subtle);">Ngày</th>
+                        <th style="padding:12px 16px;text-align:left;font-size:12px;color:var(--text-muted);border-bottom:1px solid var(--border-subtle);">Nhân viên</th>
+                        <th style="padding:12px 16px;text-align:left;font-size:12px;color:var(--text-muted);border-bottom:1px solid var(--border-subtle);">Ca phân công</th>
+                        <th style="padding:12px 16px;text-align:center;font-size:12px;color:var(--text-muted);border-bottom:1px solid var(--border-subtle);">Giờ vào</th>
+                        <th style="padding:12px 16px;text-align:center;font-size:12px;color:var(--text-muted);border-bottom:1px solid var(--border-subtle);">Giờ ra</th>
+                        <th style="padding:12px 16px;text-align:center;font-size:12px;color:var(--text-muted);border-bottom:1px solid var(--border-subtle);">Tổng giờ</th>
+                        <th style="padding:12px 16px;text-align:center;font-size:12px;color:var(--text-muted);border-bottom:1px solid var(--border-subtle);">Trạng thái</th>
+                        <th style="padding:12px 16px;text-align:left;font-size:12px;color:var(--text-muted);border-bottom:1px solid var(--border-subtle);">Ghi chú</th>
+                        <th style="padding:12px 16px;text-align:center;font-size:12px;color:var(--text-muted);border-bottom:1px solid var(--border-subtle);width:100px;">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody id="attendance-tbody">
+                    <!-- Loaded dynamically -->
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>
 
-<!-- Modal: Add/Edit Shift -->
+<!-- ============================================================== -->
+<!-- MODALS                                                         -->
+<!-- ============================================================== -->
+
+<!-- Modal: Add/Edit Shift (Existing) -->
 <div class="modal-backdrop" id="modal-shift">
     <div class="modal-box" style="max-width:420px;">
         <div class="modal-header">
@@ -93,10 +286,85 @@
         </div>
     </div>
 </div>
+
+<!-- Modal: Add/Edit Attendance (New) -->
+<div class="modal-backdrop" id="modal-attendance">
+    <div class="modal-box" style="max-width:460px;">
+        <div class="modal-header">
+            <h3><i class="fas fa-user-clock"></i> <span id="modal-att-title">Ghi nhận chấm công</span></h3>
+            <button class="modal-close-btn" onclick="closeModal('modal-attendance')"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+            <input type="hidden" id="att-id">
+            <div class="form-group">
+                <label class="form-label">Nhân viên <span style="color:var(--danger)">*</span></label>
+                <select id="att-staff" class="form-select"></select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Ngày chấm công <span style="color:var(--danger)">*</span></label>
+                <input type="date" id="att-date" class="form-control">
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                <div class="form-group">
+                    <label class="form-label">Giờ vào</label>
+                    <input type="time" id="att-checkin" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Giờ ra</label>
+                    <input type="time" id="att-checkout" class="form-control">
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Trạng thái chấm công</label>
+                <select id="att-status" class="form-select">
+                    <option value="present">🟢 Có mặt / Đúng giờ</option>
+                    <option value="late">🟠 Đi trễ</option>
+                    <option value="early_leave">🟡 Về sớm</option>
+                    <option value="half_day">🟣 Làm nửa ngày</option>
+                    <option value="absent">🔴 Vắng mặt / Nghỉ</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Ghi chú</label>
+                <input type="text" id="att-note" class="form-control" placeholder="Lý do đi trễ, về sớm, v.v.">
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-danger btn-sm" id="btn-delete-attendance" onclick="deleteCurrentAttendance()" style="display:none;margin-right:auto;">
+                <i class="fas fa-trash"></i> Xóa
+            </button>
+            <button class="btn btn-secondary btn-sm" onclick="closeModal('modal-attendance')">Hủy</button>
+            <button class="btn btn-primary btn-sm" onclick="saveAttendanceRecord()"><i class="fas fa-save"></i> Lưu thông tin</button>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <style>
+.tab-btn {
+    background: transparent;
+    border: none;
+    padding: 8px 18px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s ease;
+}
+.tab-btn:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+}
+.tab-btn.active {
+    background: var(--primary-gold);
+    color: #121212;
+}
+
 .sched-table { border-collapse:collapse; min-width:100%; }
 .sched-table th { background:var(--bg-surface); padding:8px 12px; text-align:center; font-size:12px; color:var(--text-muted); border:1px solid var(--border-subtle); white-space:nowrap; }
 .sched-table td { border:1px solid var(--border-subtle); padding:6px; min-width:90px; vertical-align:top; }
@@ -109,40 +377,148 @@
 .shift-off      { background:#22222244; color:#888; border:1px solid #444; }
 .add-shift-btn  { font-size:12px; color:var(--text-muted); cursor:pointer; padding:2px 8px; border-radius:3px; display:inline-block; }
 .add-shift-btn:hover { color:var(--primary-gold); background:var(--bg-hover); }
+
+.att-row:hover { background: var(--bg-hover); }
+.badge-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border-radius: var(--radius-full);
+    font-size: 11px;
+    font-weight: 600;
+}
+.badge-present { background: rgba(46,204,113,0.15); color: #2ecc71; border: 1px solid rgba(46,204,113,0.3); }
+.badge-late { background: rgba(243,156,18,0.15); color: #f39c12; border: 1px solid rgba(243,156,18,0.3); }
+.badge-early { background: rgba(155,89,182,0.15); color: #9b59b6; border: 1px solid rgba(155,89,182,0.3); }
+.badge-half { background: rgba(52,152,219,0.15); color: #3498db; border: 1px solid rgba(52,152,219,0.3); }
+.badge-absent { background: rgba(231,76,60,0.15); color: #e74c3c; border: 1px solid rgba(231,76,60,0.3); }
 </style>
+
 <script>
 let allStaff = [];
 let scheduleData = [];
+let attendanceData = [];
+let currentUser = null;
 let currentUserRole = '';
 let curYear, curMonth;
+let activeMainTab = 'schedule';
 
 const shiftLabels = { morning:'Sáng', afternoon:'Chiều', evening:'Tối', fullday:'Cả ngày', off:'Nghỉ' };
 const shiftColors = { morning:'shift-morning', afternoon:'shift-afternoon', evening:'shift-evening', fullday:'shift-fullday', off:'shift-off' };
 
+// ── INIT ──
 async function init() {
+    startClock();
+
     const me = await apiCall('/api/auth/me');
     if (me.logged_in) {
+        currentUser = me.user;
         currentUserRole = me.user.role;
         if (['owner','manager'].includes(currentUserRole)) {
             document.getElementById('btn-add-shift').style.display = '';
+            document.getElementById('btn-add-attendance').style.display = '';
         }
     }
+
     const staffData = await apiCall('/api/staff');
     allStaff = Array.isArray(staffData) ? staffData.filter(s => s.active) : [];
 
-    const staffFilter = document.getElementById('schedule-staff-filter');
-    const shiftStaff = document.getElementById('shift-staff');
-    allStaff.forEach(s => {
-        staffFilter.innerHTML += `<option value="${s.id}">${s.name}</option>`;
-        shiftStaff.innerHTML += `<option value="${s.id}">${s.name}</option>`;
-    });
+    // Populate staff dropdowns
+    populateStaffSelects();
 
+    // Default dates
     const now = new Date();
-    curYear = now.getFullYear(); curMonth = now.getMonth() + 1;
-    document.getElementById('schedule-month').value = `${curYear}-${String(curMonth).padStart(2,'0')}`;
-    loadSchedule();
+    curYear = now.getFullYear();
+    curMonth = now.getMonth() + 1;
+    const todayStr = formatIsoDate(now);
+    const monthStr = `${curYear}-${String(curMonth).padStart(2,'0')}`;
+
+    document.getElementById('schedule-month').value = monthStr;
+    document.getElementById('att-filter-date').value = todayStr;
+    document.getElementById('att-filter-month').value = monthStr;
+    document.getElementById('att-date').value = todayStr;
+
+    // Load initial schedule
+    await loadSchedule();
+
+    // Check staff for quick attendance
+    checkQuickStaffStatus();
 }
 
+function startClock() {
+    function update() {
+        const now = new Date();
+        const timeEl = document.getElementById('live-clock');
+        const dateEl = document.getElementById('live-date');
+        if (timeEl) {
+            timeEl.textContent = now.toLocaleTimeString('vi-VN');
+        }
+        if (dateEl) {
+            const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+            dateEl.textContent = now.toLocaleDateString('vi-VN', options);
+        }
+    }
+    update();
+    setInterval(update, 1000);
+}
+
+function formatIsoDate(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
+function populateStaffSelects() {
+    const scheduleFilter = document.getElementById('schedule-staff-filter');
+    const shiftStaff = document.getElementById('shift-staff');
+    const quickStaff = document.getElementById('quick-staff-select');
+    const attFilter = document.getElementById('att-staff-filter');
+    const attModalStaff = document.getElementById('att-staff');
+
+    scheduleFilter.innerHTML = '<option value="">Tất cả nhân viên</option>';
+    shiftStaff.innerHTML = '';
+    quickStaff.innerHTML = '';
+    attFilter.innerHTML = '<option value="">Tất cả nhân sự</option>';
+    attModalStaff.innerHTML = '';
+
+    allStaff.forEach(s => {
+        const opt = `<option value="${s.id}">${s.name} (${s.role})</option>`;
+        scheduleFilter.innerHTML += `<option value="${s.id}">${s.name}</option>`;
+        shiftStaff.innerHTML += opt;
+        quickStaff.innerHTML += opt;
+        attFilter.innerHTML += `<option value="${s.id}">${s.name}</option>`;
+        attModalStaff.innerHTML += opt;
+    });
+
+    // If current logged in user has a staff_id, preselect in quick check
+    if (currentUser && currentUser.staff_id) {
+        quickStaff.value = currentUser.staff_id;
+    }
+}
+
+// ── TAB SWITCHING ──
+function switchMainTab(tab) {
+    activeMainTab = tab;
+    document.getElementById('tab-btn-schedule').classList.toggle('active', tab === 'schedule');
+    document.getElementById('tab-btn-attendance').classList.toggle('active', tab === 'attendance');
+
+    document.getElementById('view-schedule').style.display = (tab === 'schedule') ? 'block' : 'none';
+    document.getElementById('view-attendance').style.display = (tab === 'attendance') ? 'block' : 'none';
+
+    document.getElementById('schedule-tab-actions').style.display = (tab === 'schedule') ? 'flex' : 'none';
+    document.getElementById('attendance-tab-actions').style.display = (tab === 'attendance') ? 'flex' : 'none';
+
+    if (tab === 'attendance') {
+        loadAttendance();
+        checkQuickStaffStatus();
+    }
+}
+
+// ==============================================================
+// SCHEDULE LOGIC
+// ==============================================================
 async function loadSchedule() {
     const monthVal = document.getElementById('schedule-month').value;
     if (monthVal) { const [y,m] = monthVal.split('-'); curYear=parseInt(y); curMonth=parseInt(m); }
@@ -205,6 +581,7 @@ function openShiftFor(staffId, date) {
     document.getElementById('btn-delete-shift').style.display = 'none';
     openModal('modal-shift');
 }
+
 function editShift(id, shift, date, staffId, note) {
     document.getElementById('shift-id').value = id;
     document.getElementById('shift-staff').value = staffId;
@@ -214,6 +591,7 @@ function editShift(id, shift, date, staffId, note) {
     document.getElementById('btn-delete-shift').style.display = '';
     openModal('modal-shift');
 }
+
 async function saveShift() {
     const id = document.getElementById('shift-id').value;
     const data = {
@@ -234,6 +612,7 @@ async function saveShift() {
         showToast(res.message || 'Lỗi lưu ca!', 'error');
     }
 }
+
 async function deleteCurrentShift() {
     const id = document.getElementById('shift-id').value;
     if (!id) return;
@@ -248,16 +627,324 @@ async function deleteCurrentShift() {
         }
     });
 }
+
 function prevMonth() {
     curMonth--; if (curMonth < 1) { curMonth=12; curYear--; }
     document.getElementById('schedule-month').value = `${curYear}-${String(curMonth).padStart(2,'0')}`;
     loadSchedule();
 }
+
 function nextMonth() {
     curMonth++; if (curMonth > 12) { curMonth=1; curYear++; }
     document.getElementById('schedule-month').value = `${curYear}-${String(curMonth).padStart(2,'0')}`;
     loadSchedule();
 }
+
+// ==============================================================
+// ATTENDANCE (CHẤM CÔNG) LOGIC
+// ==============================================================
+function changeAttendanceViewMode() {
+    const mode = document.getElementById('att-view-mode').value;
+    document.getElementById('att-date-wrapper').style.display = (mode === 'date') ? 'block' : 'none';
+    document.getElementById('att-month-wrapper').style.display = (mode === 'month') ? 'block' : 'none';
+    loadAttendance();
+}
+
+function setAttendanceToday() {
+    document.getElementById('att-view-mode').value = 'today';
+    changeAttendanceViewMode();
+}
+
+async function loadAttendance() {
+    const mode = document.getElementById('att-view-mode').value;
+    const staffId = document.getElementById('att-staff-filter').value;
+    let url = '/api/attendance?';
+
+    const todayStr = formatIsoDate(new Date());
+
+    if (mode === 'today') {
+        url += `date=${todayStr}`;
+        document.getElementById('att-table-title').textContent = `Chấm công hôm nay (${todayStr})`;
+    } else if (mode === 'date') {
+        const selectedDate = document.getElementById('att-filter-date').value || todayStr;
+        url += `date=${selectedDate}`;
+        document.getElementById('att-table-title').textContent = `Chấm công ngày ${selectedDate}`;
+    } else if (mode === 'month') {
+        const selectedMonth = document.getElementById('att-filter-month').value || `${curYear}-${String(curMonth).padStart(2,'0')}`;
+        url += `month=${selectedMonth}`;
+        document.getElementById('att-table-title').textContent = `Chấm công tháng ${selectedMonth}`;
+    }
+
+    if (staffId) {
+        url += `&staff_id=${staffId}`;
+    }
+
+    const data = await apiCall(url);
+    attendanceData = Array.isArray(data) ? data : [];
+    renderAttendanceTable();
+}
+
+function renderAttendanceTable() {
+    const tbody = document.getElementById('attendance-tbody');
+    const statusFilter = document.getElementById('att-status-filter').value;
+    const countEl = document.getElementById('att-table-count');
+
+    let filtered = attendanceData;
+    if (statusFilter !== 'all') {
+        filtered = filtered.filter(item => item.status === statusFilter);
+    }
+
+    countEl.textContent = `${filtered.length} bản ghi`;
+    updateAttendanceStats(attendanceData);
+
+    if (filtered.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="9" style="text-align:center;padding:36px;color:var(--text-muted);">
+                    <i class="fas fa-clipboard-list" style="font-size:32px;margin-bottom:10px;display:block;opacity:0.4;"></i>
+                    Chưa có dữ liệu chấm công cho bộ lọc đã chọn.
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    const canManage = ['owner','manager'].includes(currentUserRole);
+
+    tbody.innerHTML = filtered.map(item => {
+        // Status Badge
+        let badgeHtml = '';
+        if (item.status === 'present') {
+            badgeHtml = '<span class="badge-status badge-present"><i class="fas fa-check-circle"></i> Đúng giờ</span>';
+        } else if (item.status === 'late') {
+            badgeHtml = '<span class="badge-status badge-late"><i class="fas fa-exclamation-triangle"></i> Đi trễ</span>';
+        } else if (item.status === 'early_leave') {
+            badgeHtml = '<span class="badge-status badge-early"><i class="fas fa-running"></i> Về sớm</span>';
+        } else if (item.status === 'half_day') {
+            badgeHtml = '<span class="badge-status badge-half"><i class="fas fa-adjust"></i> Nửa ngày</span>';
+        } else if (item.status === 'absent') {
+            badgeHtml = '<span class="badge-status badge-absent"><i class="fas fa-times-circle"></i> Vắng</span>';
+        } else {
+            badgeHtml = `<span class="badge-status">${item.status}</span>`;
+        }
+
+        // Find scheduled shift if available
+        const matchedShift = scheduleData.find(s => s.staff_id === item.staff_id && s.date === item.date);
+        let shiftDisplay = '<span style="color:var(--text-muted);font-size:12px;">--</span>';
+        if (matchedShift) {
+            shiftDisplay = `<span class="shift-chip ${shiftColors[matchedShift.shift]||''}" style="font-size:11px;">${shiftLabels[matchedShift.shift]||matchedShift.shift}</span>`;
+        }
+
+        const actionsHtml = canManage ? `
+            <button class="btn btn-secondary btn-sm" style="padding:4px 8px;font-size:12px;" onclick="editAttendance(${item.id})" title="Chỉnh sửa">
+                <i class="fas fa-edit"></i>
+            </button>
+            <button class="btn btn-secondary btn-sm" style="padding:4px 8px;font-size:12px;color:var(--danger);" onclick="deleteAttendanceDirect(${item.id})" title="Xóa">
+                <i class="fas fa-trash"></i>
+            </button>
+        ` : `
+            <span style="color:var(--text-muted);font-size:11px;"><i class="fas fa-lock"></i> Đã ghi</span>
+        `;
+
+        return `
+            <tr class="att-row" style="border-bottom:1px solid var(--border-subtle);">
+                <td style="padding:12px 16px;font-size:13px;font-weight:600;color:var(--text-primary);white-space:nowrap;">
+                    ${item.date}
+                </td>
+                <td style="padding:12px 16px;">
+                    <div style="font-weight:600;color:var(--text-primary);font-size:13px;">${item.staff_name}</div>
+                    <small style="color:var(--text-muted);">${item.staff_role}</small>
+                </td>
+                <td style="padding:12px 16px;">
+                    ${shiftDisplay}
+                </td>
+                <td style="padding:12px 16px;text-align:center;font-weight:600;font-family:monospace;font-size:13px;color:${item.check_in ? 'var(--success)' : 'var(--text-muted)'};">
+                    ${item.check_in || '--:--'}
+                </td>
+                <td style="padding:12px 16px;text-align:center;font-weight:600;font-family:monospace;font-size:13px;color:${item.check_out ? 'var(--primary-gold)' : 'var(--text-muted)'};">
+                    ${item.check_out || '--:--'}
+                </td>
+                <td style="padding:12px 16px;text-align:center;font-weight:700;font-size:13px;color:var(--primary-gold);">
+                    ${item.work_hours > 0 ? `${item.work_hours}h` : '-'}
+                </td>
+                <td style="padding:12px 16px;text-align:center;">
+                    ${badgeHtml}
+                </td>
+                <td style="padding:12px 16px;font-size:12px;color:var(--text-secondary);max-width:180px;">
+                    ${item.note || '<span style="color:var(--text-muted);">-</span>'}
+                </td>
+                <td style="padding:12px 16px;text-align:center;white-space:nowrap;">
+                    ${actionsHtml}
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function updateAttendanceStats(items) {
+    let total = items.length;
+    let present = 0, late = 0, early = 0, absent = 0, totalHours = 0;
+
+    items.forEach(it => {
+        if (it.status === 'present') present++;
+        else if (it.status === 'late') late++;
+        else if (it.status === 'early_leave' || it.status === 'half_day') early++;
+        else if (it.status === 'absent') absent++;
+
+        totalHours += (parseFloat(it.work_hours) || 0);
+    });
+
+    document.getElementById('att-stat-total').textContent = total;
+    document.getElementById('att-stat-present').textContent = present;
+    document.getElementById('att-stat-late').textContent = late;
+    document.getElementById('att-stat-early').textContent = early;
+    document.getElementById('att-stat-absent').textContent = absent;
+    document.getElementById('att-stat-hours').textContent = `${Math.round(totalHours * 10) / 10}h`;
+}
+
+// ── QUICK CHECK-IN & CHECK-OUT ──
+async function checkQuickStaffStatus() {
+    const staffId = document.getElementById('quick-staff-select').value;
+    const bannerText = document.getElementById('quick-status-text');
+    if (!staffId) {
+        bannerText.textContent = 'Vui lòng chọn nhân viên.';
+        return;
+    }
+
+    const todayStr = formatIsoDate(new Date());
+    const res = await apiCall(`/api/attendance?date=${todayStr}&staff_id=${staffId}`);
+    if (Array.isArray(res) && res.length > 0) {
+        const item = res[0];
+        let statusStr = '';
+        if (item.check_in && item.check_out) {
+            statusStr = `✅ Đã hoàn tất ca hôm nay: Vào lúc <strong>${item.check_in}</strong>, Ra lúc <strong>${item.check_out}</strong> (${item.work_hours} giờ làm).`;
+        } else if (item.check_in) {
+            statusStr = `🟡 Đang làm việc: Đã vào ca lúc <strong>${item.check_in}</strong> (Chưa chấm ra).`;
+        } else if (item.check_out) {
+            statusStr = `Đã ghi nhận ra ca lúc <strong>${item.check_out}</strong>.`;
+        } else {
+            statusStr = `Đã ghi nhận trạng thái: ${item.status}.`;
+        }
+        bannerText.innerHTML = statusStr;
+    } else {
+        bannerText.innerHTML = `Chưa có lượt chấm công nào trong hôm nay (${todayStr}). Sẵn sàng vào ca.`;
+    }
+}
+
+async function triggerQuickCheck(action) {
+    const staffId = document.getElementById('quick-staff-select').value;
+    const note = document.getElementById('quick-note').value;
+
+    if (!staffId) {
+        showToast('Vui lòng chọn nhân viên!', 'warning');
+        return;
+    }
+
+    const res = await apiCall('/api/attendance/quick-check', 'POST', {
+        staff_id: parseInt(staffId),
+        action: action,
+        note: note
+    });
+
+    if (res.success) {
+        showToast(res.message || 'Chấm công thành công!');
+        document.getElementById('quick-note').value = '';
+        checkQuickStaffStatus();
+        loadAttendance();
+    } else {
+        showToast(res.message || 'Lỗi chấm công!', 'error');
+    }
+}
+
+function openQuickAttendanceModal() {
+    // Focus into quick check widget
+    document.getElementById('quick-staff-select').focus();
+    showToast('Chọn nhân viên và nhấn "Vào ca" hoặc "Ra ca" để chấm công nhanh', 'info');
+}
+
+// ── FULL ATTENDANCE MODAL (ADD / EDIT) ──
+function openAddAttendanceModal() {
+    document.getElementById('att-id').value = '';
+    document.getElementById('modal-att-title').textContent = 'Ghi nhận chấm công';
+    document.getElementById('att-staff').value = allStaff[0] ? allStaff[0].id : '';
+    document.getElementById('att-date').value = formatIsoDate(new Date());
+    document.getElementById('att-checkin').value = '';
+    document.getElementById('att-checkout').value = '';
+    document.getElementById('att-status').value = 'present';
+    document.getElementById('att-note').value = '';
+    document.getElementById('btn-delete-attendance').style.display = 'none';
+    openModal('modal-attendance');
+}
+
+function editAttendance(id) {
+    const item = attendanceData.find(x => x.id === id);
+    if (!item) return;
+
+    document.getElementById('att-id').value = item.id;
+    document.getElementById('modal-att-title').textContent = 'Chỉnh sửa chấm công';
+    document.getElementById('att-staff').value = item.staff_id;
+    document.getElementById('att-date').value = item.date;
+    document.getElementById('att-checkin').value = item.check_in || '';
+    document.getElementById('att-checkout').value = item.check_out || '';
+    document.getElementById('att-status').value = item.status || 'present';
+    document.getElementById('att-note').value = item.note || '';
+    document.getElementById('btn-delete-attendance').style.display = 'inline-flex';
+    openModal('modal-attendance');
+}
+
+async function saveAttendanceRecord() {
+    const id = document.getElementById('att-id').value;
+    const staffId = document.getElementById('att-staff').value;
+    const date = document.getElementById('att-date').value;
+
+    if (!staffId || !date) {
+        showToast('Vui lòng chọn nhân viên và ngày!', 'warning');
+        return;
+    }
+
+    const payload = {
+        staff_id: parseInt(staffId),
+        date: date,
+        check_in: document.getElementById('att-checkin').value || null,
+        check_out: document.getElementById('att-checkout').value || null,
+        status: document.getElementById('att-status').value,
+        note: document.getElementById('att-note').value
+    };
+
+    const url = id ? `/api/attendance/${id}` : '/api/attendance';
+    const method = id ? 'PUT' : 'POST';
+
+    const res = await apiCall(url, method, payload);
+    if (res.success) {
+        showToast('Lưu bản ghi chấm công thành công!');
+        closeModal('modal-attendance');
+        loadAttendance();
+        checkQuickStaffStatus();
+    } else {
+        showToast(res.message || 'Lỗi lưu chấm công!', 'error');
+    }
+}
+
+async function deleteCurrentAttendance() {
+    const id = document.getElementById('att-id').value;
+    if (!id) return;
+    deleteAttendanceDirect(id);
+}
+
+function deleteAttendanceDirect(id) {
+    showConfirm('Xác nhận xóa bản ghi', 'Bạn có chắc chắn muốn xóa bản ghi chấm công này?', async () => {
+        const res = await apiCall(`/api/attendance/${id}`, 'DELETE');
+        if (res.success) {
+            showToast('Đã xóa bản ghi chấm công!');
+            closeModal('modal-attendance');
+            loadAttendance();
+            checkQuickStaffStatus();
+        } else {
+            showToast(res.message || 'Lỗi xóa chấm công!', 'error');
+        }
+    });
+}
+
 document.addEventListener('DOMContentLoaded', init);
 </script>
 {% endblock %}

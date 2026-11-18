@@ -6,7 +6,7 @@ from models import (
     Order, OrderItem, Payment, Voucher,
     Ingredient, MenuIngredient,
     Member, PointTransaction, PointSetting,
-    User, ShiftSchedule, SalaryRecord, OrderHistory,
+    User, ShiftSchedule, SalaryRecord, OrderHistory, Attendance,
     Area
 )
 
@@ -223,6 +223,134 @@ def delete_schedule(id):
         db.session.delete(s)
         db.session.commit()
     return jsonify({'success': True})
+
+# ── ATTENDANCE (CHẤM CÔNG) ──
+@app.route('/api/attendance', methods=['GET'])
+def get_attendance():
+    date = request.args.get('date')       # YYYY-MM-DD
+    month = request.args.get('month')     # YYYY-MM
+    staff_id = request.args.get('staff_id')
+    u = get_current_user()
+    
+    q = Attendance.query
+    if date:
+        q = q.filter_by(date=date)
+    elif month:
+        q = q.filter(Attendance.date.like(f'{month}%'))
+        
+    if staff_id:
+        q = q.filter_by(staff_id=int(staff_id))
+    
+    records = q.order_by(Attendance.date.desc(), Attendance.id.desc()).all()
+    return jsonify([r.to_dict() for r in records])
+
+@app.route('/api/attendance', methods=['POST'])
+def save_attendance():
+    u = get_current_user()
+    data = request.json or {}
+    staff_id = data.get('staff_id')
+    date = data.get('date')
+    if not staff_id or not date:
+        return jsonify({'success': False, 'message': 'Thiếu nhân viên hoặc ngày!'}), 400
+    
+    staff_id = int(staff_id)
+    if u and u.role in ['waiter', 'cashier', 'barista'] and u.staff_id and u.staff_id != staff_id:
+        return jsonify({'success': False, 'message': 'Không có quyền chấm công cho người khác!'}), 403
+
+    record = Attendance.query.filter_by(staff_id=staff_id, date=date).first()
+    if not record:
+        record = Attendance(
+            staff_id=staff_id,
+            date=date,
+            recorded_by=u.id if u else None
+        )
+        db.session.add(record)
+
+    if 'check_in' in data:
+        record.check_in = data['check_in'] or None
+    if 'check_out' in data:
+        record.check_out = data['check_out'] or None
+    if 'status' in data:
+        record.status = data['status'] or 'present'
+    if 'note' in data:
+        record.note = data['note'] or ''
+
+    db.session.commit()
+    return jsonify({'success': True, 'attendance': record.to_dict()})
+
+@app.route('/api/attendance/quick-check', methods=['POST'])
+def quick_check_attendance():
+    """Chấm công nhanh 1 chạm: vào ca hoặc ra ca"""
+    u = get_current_user()
+    data = request.json or {}
+    now = datetime.now()
+    today_str = data.get('date') or now.strftime('%Y-%m-%d')
+    cur_time = data.get('time') or now.strftime('%H:%M')
+    action = data.get('action', 'check_in') # check_in or check_out
+    
+    staff_id = data.get('staff_id')
+    if not staff_id and u and u.staff_id:
+        staff_id = u.staff_id
+    if not staff_id:
+        return jsonify({'success': False, 'message': 'Vui lòng chọn nhân viên!'}), 400
+    
+    staff_id = int(staff_id)
+    if u and u.role in ['waiter', 'cashier', 'barista'] and u.staff_id and u.staff_id != staff_id:
+        return jsonify({'success': False, 'message': 'Không có quyền chấm công cho người khác!'}), 403
+
+    record = Attendance.query.filter_by(staff_id=staff_id, date=today_str).first()
+    if not record:
+        record = Attendance(
+            staff_id=staff_id,
+            date=today_str,
+            recorded_by=u.id if u else None,
+            status='present'
+        )
+        db.session.add(record)
+
+    if action == 'check_in':
+        record.check_in = cur_time
+        msg = f"Đã chấm công VÀO lúc {cur_time}"
+    else:
+        record.check_out = cur_time
+        msg = f"Đã chấm công RA lúc {cur_time}"
+    
+    if data.get('note'):
+        record.note = data['note']
+
+    db.session.commit()
+    return jsonify({'success': True, 'message': msg, 'attendance': record.to_dict()})
+
+@app.route('/api/attendance/<id>', methods=['PUT'])
+def update_attendance_record(id):
+    u = get_current_user()
+    record = Attendance.query.get(id)
+    if not record:
+        return jsonify({'success': False, 'message': 'Không tìm thấy bản ghi!'}), 404
+        
+    data = request.json or {}
+    if 'check_in' in data:
+        record.check_in = data['check_in'] or None
+    if 'check_out' in data:
+        record.check_out = data['check_out'] or None
+    if 'status' in data:
+        record.status = data['status'] or 'present'
+    if 'note' in data:
+        record.note = data['note'] or ''
+
+    db.session.commit()
+    return jsonify({'success': True, 'attendance': record.to_dict()})
+
+@app.route('/api/attendance/<id>', methods=['DELETE'])
+def delete_attendance_record(id):
+    u = get_current_user()
+    if not u or u.role not in ['owner', 'manager']:
+        return jsonify({'success': False, 'message': 'Không có quyền xóa bản ghi chấm công!'}), 403
+    record = Attendance.query.get(id)
+    if record:
+        db.session.delete(record)
+        db.session.commit()
+    return jsonify({'success': True, 'message': 'Đã xóa bản ghi chấm công!'})
 
 # ── SALARY ──
 @app.route('/salary')
