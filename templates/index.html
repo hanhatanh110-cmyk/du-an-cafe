@@ -263,6 +263,12 @@ async function applyFilter() {
     }
 
     document.getElementById('chart-title').textContent = `Doanh thu ${chartLabel}`;
+    const btnFilter = document.getElementById('btn-apply-filter');
+    const origHTML = btnFilter ? btnFilter.innerHTML : null;
+    if (btnFilter) {
+        btnFilter.disabled = true;
+        btnFilter.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang tải...';
+    }
 
     try {
         const revRes = await apiCall(url);
@@ -282,21 +288,29 @@ async function applyFilter() {
     } catch (err) {
         console.error(err);
         showToast('Lỗi kết nối máy chủ!', 'error');
+    } finally {
+        if (btnFilter && origHTML) {
+            btnFilter.disabled = false;
+            btnFilter.innerHTML = origHTML;
+        }
     }
 }
 
 async function loadDashboardData() {
     try {
-        const statsRes = await apiCall('/api/stats');
-        if (statsRes.success) {
-            document.getElementById('stat-revenue').textContent = formatVND(statsRes.today_revenue);
-            document.getElementById('stat-orders').textContent = statsRes.today_orders + ' đơn';
-            document.getElementById('stat-tables').textContent = `${statsRes.active_tables} / ${statsRes.total_tables}`;
-            document.getElementById('stat-low-stock').textContent = statsRes.low_stock_count + ' mặt hàng';
-            if (statsRes.low_stock_count > 0)
-                document.getElementById('stat-low-stock').style.color = 'var(--danger)';
-        }
-        await applyFilter(); // Load default 7-day chart
+        await Promise.all([
+            apiCall('/api/stats').then(statsRes => {
+                if (statsRes.success) {
+                    document.getElementById('stat-revenue').textContent = formatVND(statsRes.today_revenue);
+                    document.getElementById('stat-orders').textContent = statsRes.today_orders + ' đơn';
+                    document.getElementById('stat-tables').textContent = `${statsRes.active_tables} / ${statsRes.total_tables}`;
+                    document.getElementById('stat-low-stock').textContent = statsRes.low_stock_count + ' mặt hàng';
+                    if (statsRes.low_stock_count > 0)
+                        document.getElementById('stat-low-stock').style.color = 'var(--danger)';
+                }
+            }),
+            applyFilter() // Load default 7-day chart in parallel
+        ]);
     } catch (err) {
         console.error('Failed to load dashboard:', err);
     }

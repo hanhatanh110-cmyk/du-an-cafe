@@ -170,7 +170,11 @@ let allStaffList = [];
 let currentUserRole = '';
 
 async function initSalaryPage() {
-    const me = await apiCall('/api/auth/me');
+    const [me, staffData] = await Promise.all([
+        apiCall('/api/auth/me'),
+        apiCall('/api/staff')
+    ]);
+
     if (me.logged_in) {
         currentUserRole = me.user.role;
         if (['owner', 'manager'].includes(currentUserRole)) {
@@ -179,7 +183,6 @@ async function initSalaryPage() {
         }
     }
 
-    const staffData = await apiCall('/api/staff');
     allStaffList = Array.isArray(staffData) ? staffData : [];
 
     // Populate staff dropdown
@@ -272,15 +275,28 @@ function renderSalaryTable() {
 }
 
 async function togglePaidStatus(id, newPaid) {
+    const rec = salaryRecords.find(r => r.id === id);
+    const oldPaid = rec ? rec.paid : !newPaid;
+
+    // Optimistic UI update (0ms delay)
+    if (rec) rec.paid = newPaid;
+    renderSalaryTable();
+    updateSummaryStats();
+    showToast(`Đã chuyển trạng thái: ${newPaid ? 'Đã thanh toán' : 'Chưa thanh toán'}`);
+
     try {
         const res = await apiCall(`/api/salary/${id}`, 'PUT', { paid: newPaid });
-        if (res.success !== false) {
-            showToast(`Đã chuyển trạng thái: ${newPaid ? 'Đã thanh toán' : 'Chưa thanh toán'}`);
-            loadSalaryData();
-        } else {
+        if (res.success === false) {
+            // Revert on failure
+            if (rec) rec.paid = oldPaid;
+            renderSalaryTable();
+            updateSummaryStats();
             showToast(res.message || 'Lỗi cập nhật trạng thái', 'error');
         }
     } catch(e) {
+        if (rec) rec.paid = oldPaid;
+        renderSalaryTable();
+        updateSummaryStats();
         showToast('Lỗi khi đổi trạng thái chi trả', 'error');
     }
 }
@@ -367,25 +383,23 @@ async function autoGenerateSalary() {
     if (!month) return;
 
     showConfirm('Tính lương tự động', `Hệ thống sẽ tổng hợp số ngày công từ lịch làm việc và lập bảng lương cho toàn bộ nhân viên trong tháng ${month}. Tiếp tục?`, async () => {
-        let createdCount = 0;
-        for (const staff of allStaffList) {
-            if (!staff.active) continue;
-            // Check if already exists
-            const exists = salaryRecords.some(r => r.staff_id === staff.id && r.month === month);
-            if (!exists) {
-                const payload = {
-                    staff_id: staff.id,
-                    month: month,
-                    base_salary: staff.salary || 0,
-                    bonus: 0,
-                    deduction: 0,
-                    note: 'Tính tự động từ lịch làm việc'
-                };
-                await apiCall('/api/salary', 'POST', payload);
-                createdCount++;
-            }
+        const staffToCreate = allStaffList.filter(s => s.active && !salaryRecords.some(r => r.staff_id === s.id && r.month === month));
+        if (staffToCreate.length === 0) {
+            showToast('Tất cả nhân viên đã có bảng lương tháng này!', 'info');
+            return;
         }
-        showToast(`Đã tạo bảng lương cho ${createdCount} nhân viên!`);
+
+        const tasks = staffToCreate.map(staff => apiCall('/api/salary', 'POST', {
+            staff_id: staff.id,
+            month: month,
+            base_salary: staff.salary || 0,
+            bonus: 0,
+            deduction: 0,
+            note: 'Tính tự động từ lịch làm việc'
+        }));
+
+        await Promise.all(tasks);
+        showToast(`Đã tạo bảng lương cho ${staffToCreate.length} nhân viên!`);
         loadSalaryData();
     });
 }

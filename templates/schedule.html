@@ -486,6 +486,8 @@ let currentUser = null;
 let currentUserRole = '';
 let curYear, curMonth;
 let activeMainTab = 'schedule';
+let currentWeekNum = 1;
+let scheduleViewMode = 'single_week'; // 'single_week' or 'all_weeks'
 
 const shiftLabels = { morning:'Sáng', afternoon:'Chiều', evening:'Tối', fullday:'Cả ngày', off:'Nghỉ' };
 const shiftColors = { morning:'shift-morning', afternoon:'shift-afternoon', evening:'shift-evening', fullday:'shift-fullday', off:'shift-off' };
@@ -494,17 +496,19 @@ const shiftColors = { morning:'shift-morning', afternoon:'shift-afternoon', even
 async function init() {
     startClock();
 
-    const me = await apiCall('/api/auth/me');
-    if (me.logged_in) {
-        currentUser = me.user;
-        currentUserRole = me.user.role;
+    const [meRes, staffData] = await Promise.all([
+        apiCall('/api/auth/me'),
+        apiCall('/api/staff')
+    ]);
+    if (meRes.logged_in) {
+        currentUser = meRes.user;
+        currentUserRole = meRes.user.role;
         if (['owner','manager'].includes(currentUserRole)) {
             document.getElementById('btn-add-shift').style.display = '';
             document.getElementById('btn-add-attendance').style.display = '';
         }
     }
 
-    const staffData = await apiCall('/api/staff');
     allStaff = Array.isArray(staffData) ? staffData.filter(s => s.active) : [];
 
     // Populate staff dropdowns
@@ -522,11 +526,11 @@ async function init() {
     document.getElementById('att-filter-month').value = monthStr;
     document.getElementById('att-date').value = todayStr;
 
-    // Load initial schedule
-    await loadSchedule();
-
-    // Check staff for quick attendance
-    checkQuickStaffStatus();
+    // Load initial schedule + quick staff status in parallel
+    await Promise.all([
+        loadSchedule(true),
+        checkQuickStaffStatus()
+    ]);
 }
 
 function startClock() {
@@ -600,9 +604,33 @@ function switchMainTab(tab) {
 }
 
 // ==============================================================
-// SCHEDULE LOGIC
+// SCHEDULE LOGIC (CHIA THEO TUẦN GỌN GÀNG)
 // ==============================================================
-async function loadSchedule() {
+function getWeeksForMonth(year, month) {
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const weeks = [
+        { num: 1, start: 1, end: 7, label: 'Tuần 1 (1 - 7)' },
+        { num: 2, start: 8, end: 14, label: 'Tuần 2 (8 - 14)' },
+        { num: 3, start: 15, end: 21, label: 'Tuần 3 (15 - 21)' },
+        { num: 4, start: 22, end: 28, label: 'Tuần 4 (22 - 28)' }
+    ];
+    if (daysInMonth >= 29) {
+        weeks.push({ num: 5, start: 29, end: daysInMonth, label: `Tuần 5 (29 - ${daysInMonth})` });
+    }
+    return weeks;
+}
+
+function getDefaultWeekForToday(year, month, weeks) {
+    const now = new Date();
+    if (now.getFullYear() === year && (now.getMonth() + 1) === month) {
+        const todayDate = now.getDate();
+        const found = weeks.find(w => todayDate >= w.start && todayDate <= w.end);
+        if (found) return found.num;
+    }
+    return 1;
+}
+
+async function loadSchedule(isInitial = false) {
     const monthVal = document.getElementById('schedule-month').value;
     if (monthVal) { const [y,m] = monthVal.split('-'); curYear=parseInt(y); curMonth=parseInt(m); }
     document.getElementById('cal-title').textContent = `Lịch tháng ${String(curMonth).padStart(2,'0')}/${curYear}`;
@@ -610,48 +638,207 @@ async function loadSchedule() {
     let url = `/api/schedule?month=${curYear}-${String(curMonth).padStart(2,'0')}`;
     if (staffFilter) url += `&staff_id=${staffFilter}`;
     scheduleData = await apiCall(url) || [];
+
+    const weeks = getWeeksForMonth(curYear, curMonth);
+    if (isInitial || currentWeekNum > weeks.length) {
+        currentWeekNum = getDefaultWeekForToday(curYear, curMonth, weeks);
+    }
+
     renderCalendar();
 }
 
-function renderCalendar() {
-    const daysInMonth = new Date(curYear, curMonth, 0).getDate();
-    const days = Array.from({length: daysInMonth}, (_,i) => i+1);
+function renderWeekPills(weeks) {
+    const container = document.getElementById('week-pills-container');
+    if (!container) return;
+
+    container.innerHTML = weeks.map(w => `
+        <button class="week-pill ${w.num === currentWeekNum ? 'active' : ''}" onclick="selectWeek(${w.num})">
+            <i class="fas fa-calendar-week"></i> ${w.label}
+        </button>
+    `).join('');
+}
+
+function selectWeek(num) {
+    currentWeekNum = num;
+    renderCalendar();
+}
+
+function prevWeek() {
+    const weeks = getWeeksForMonth(curYear, curMonth);
+    if (currentWeekNum > 1) {
+        currentWeekNum--;
+        renderCalendar();
+    } else {
+        prevMonth();
+        const prevWeeks = getWeeksForMonth(curYear, curMonth);
+        currentWeekNum = prevWeeks.length;
+        renderCalendar();
+    }
+}
+
+function nextWeek() {
+    const weeks = getWeeksForMonth(curYear, curMonth);
+    if (currentWeekNum < weeks.length) {
+        currentWeekNum++;
+        renderCalendar();
+    } else {
+        nextMonth();
+        currentWeekNum = 1;
+        renderCalendar();
+    }
+}
+
+function goToCurrentWeek() {
+    const now = new Date();
+    curYear = now.getFullYear();
+    curMonth = now.getMonth() + 1;
+    document.getElementById('schedule-month').value = `${curYear}-${String(curMonth).padStart(2,'0')}`;
+
+    const weeks = getWeeksForMonth(curYear, curMonth);
+    currentWeekNum = getDefaultWeekForToday(curYear, curMonth, weeks);
+    loadSchedule();
+}
+
+function setScheduleViewMode(mode) {
+    scheduleViewMode = mode;
+    const btnWeek = document.getElementById('btn-mode-week');
+    const btnAll = document.getElementById('btn-mode-all');
+
+    if (mode === 'single_week') {
+        btnWeek.style.background = 'var(--primary-gold)';
+        btnWeek.style.color = '#121212';
+        btnWeek.style.fontWeight = '600';
+        btnAll.style.background = 'transparent';
+        btnAll.style.color = 'var(--text-secondary)';
+        btnAll.style.fontWeight = '400';
+    } else {
+        btnAll.style.background = 'var(--primary-gold)';
+        btnAll.style.color = '#121212';
+        btnAll.style.fontWeight = '600';
+        btnWeek.style.background = 'transparent';
+        btnWeek.style.color = 'var(--text-secondary)';
+        btnWeek.style.fontWeight = '400';
+    }
+
+    renderCalendar();
+}
+
+function renderWeekTableHtml(w, displayStaff, canEdit) {
     const dayNames = ['CN','T2','T3','T4','T5','T6','T7'];
+    const now = new Date();
+    const todayStr = formatIsoDate(now);
+
+    const weekDays = [];
+    for (let d = w.start; d <= w.end; d++) {
+        weekDays.push(d);
+    }
+
+    let html = `<table class="sched-table"><thead><tr>
+        <th style="min-width:150px;text-align:left;padding-left:14px;">Nhân viên</th>`;
+
+    weekDays.forEach(d => {
+        const dow = new Date(curYear, curMonth - 1, d).getDay();
+        const dateStr = `${curYear}-${String(curMonth).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+        const isToday = (dateStr === todayStr);
+        const isWeekend = (dow === 0 || dow === 6);
+
+        html += `
+            <th class="${isToday ? 'today-col-header' : ''}" style="${isWeekend ? 'color:var(--primary-gold);' : ''}min-width:105px;">
+                <div style="font-size:16px;font-weight:700;">${d}</div>
+                <div style="font-size:11px;color:${isToday ? 'var(--primary-gold)' : 'var(--text-muted)'};font-weight:${isToday ? '700' : '500'};">
+                    ${dayNames[dow]}${isToday ? ' • Hôm nay' : ''}
+                </div>
+            </th>
+        `;
+    });
+
+    html += `<th style="min-width:70px;text-align:center;">Tổng ca</th>`;
+    html += `</tr></thead><tbody>`;
+
+    if (displayStaff.length === 0) {
+        html += `<tr><td colspan="${weekDays.length + 2}" style="text-align:center;padding:24px;color:var(--text-muted);">Không có nhân viên nào.</td></tr>`;
+        html += `</tbody></table>`;
+        return html;
+    }
+
+    displayStaff.forEach(staff => {
+        let staffWeeklyShifts = 0;
+        let cellsHtml = '';
+
+        weekDays.forEach(d => {
+            const dateStr = `${curYear}-${String(curMonth).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+            const isToday = (dateStr === todayStr);
+            const existing = scheduleData.filter(s => s.staff_id === staff.id && s.date === dateStr);
+
+            if (existing.length > 0 && existing.some(s => s.shift !== 'off')) {
+                staffWeeklyShifts++;
+            }
+
+            cellsHtml += `<td style="text-align:center;padding:8px 4px;" class="${isToday ? 'today-col-cell' : ''}">`;
+            existing.forEach(s => {
+                cellsHtml += `<span class="shift-chip ${shiftColors[s.shift]||''}" title="${s.note||''}" ${canEdit ? `onclick="editShift(${s.id},'${s.shift}','${dateStr}',${s.staff_id},'${(s.note||'').replace(/'/g, "\\'")}')"` : ''}>${shiftLabels[s.shift]||s.shift}</span>`;
+            });
+
+            if (canEdit && existing.length === 0) {
+                cellsHtml += `<div class="add-shift-btn" onclick="openShiftFor(${staff.id}, '${dateStr}')" title="Thêm ca làm">+ Thêm</div>`;
+            }
+            cellsHtml += `</td>`;
+        });
+
+        html += `
+            <tr>
+                <td class="sched-staff-name" style="padding-left:14px;">
+                    <div>${staff.name}</div>
+                    <small style="color:var(--text-muted);font-weight:400;">${staff.role}</small>
+                </td>
+                ${cellsHtml}
+                <td style="text-align:center;font-weight:700;font-size:13px;color:var(--primary-gold);vertical-align:middle;">
+                    ${staffWeeklyShifts > 0 ? `${staffWeeklyShifts} ca` : '-'}
+                </td>
+            </tr>
+        `;
+    });
+
+    html += `</tbody></table>`;
+    return html;
+}
+
+function renderCalendar() {
+    const weeks = getWeeksForMonth(curYear, curMonth);
+    if (currentWeekNum > weeks.length) currentWeekNum = weeks.length;
+    if (currentWeekNum < 1) currentWeekNum = 1;
+
+    renderWeekPills(weeks);
+
     const canEdit = ['owner','manager'].includes(currentUserRole);
     const staffFilter = document.getElementById('schedule-staff-filter').value;
     const displayStaff = staffFilter ? allStaff.filter(s => String(s.id) === staffFilter) : allStaff;
 
-    let html = `<table class="sched-table"><thead><tr>
-        <th style="min-width:140px;">Nhân viên</th>`;
-    days.forEach(d => {
-        const dow = new Date(curYear, curMonth-1, d).getDay();
-        const isWeekend = dow === 0 || dow === 6;
-        html += `<th style="${isWeekend?'color:var(--primary-gold);':''}">${d}<br><span style="font-size:10px;">${dayNames[dow]}</span></th>`;
-    });
-    html += `</tr></thead><tbody>`;
+    const grid = document.getElementById('schedule-grid');
+    const weekSelectorBar = document.getElementById('week-selector-bar');
 
-    if (displayStaff.length === 0) {
-        html += `<tr><td colspan="${daysInMonth + 1}" style="text-align:center;padding:24px;color:var(--text-muted);">Không có nhân viên nào.</td></tr>`;
-    }
-
-    displayStaff.forEach(staff => {
-        html += `<tr><td class="sched-staff-name">${staff.name}<br><small style="color:var(--text-muted);font-weight:400;">${staff.role}</small></td>`;
-        days.forEach(d => {
-            const dateStr = `${curYear}-${String(curMonth).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-            const existing = scheduleData.filter(s => s.staff_id === staff.id && s.date === dateStr);
-            html += `<td style="text-align:center;">`;
-            existing.forEach(s => {
-                html += `<span class="shift-chip ${shiftColors[s.shift]||''}" title="${s.note||''}" ${canEdit ? `onclick="editShift(${s.id},'${s.shift}','${dateStr}',${s.staff_id},'${(s.note||'').replace(/'/g, "\\'")}')"` : ''}>${shiftLabels[s.shift]||s.shift}</span>`;
-            });
-            if (canEdit && existing.length === 0) {
-                html += `<span class="add-shift-btn" onclick="openShiftFor(${staff.id}, '${dateStr}')">+</span>`;
-            }
-            html += `</td>`;
+    if (scheduleViewMode === 'single_week') {
+        if (weekSelectorBar) weekSelectorBar.style.display = 'flex';
+        const curWeek = weeks.find(w => w.num === currentWeekNum) || weeks[0];
+        grid.innerHTML = renderWeekTableHtml(curWeek, displayStaff, canEdit);
+    } else {
+        if (weekSelectorBar) weekSelectorBar.style.display = 'none';
+        let allHtml = '';
+        weeks.forEach(w => {
+            allHtml += `
+                <div style="margin-bottom:24px;border:1px solid var(--border-subtle);border-radius:var(--radius-md);overflow:hidden;">
+                    <div style="background:var(--bg-surface);padding:10px 18px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border-subtle);">
+                        <span style="font-weight:700;color:var(--primary-gold);font-size:14px;"><i class="fas fa-calendar-week"></i> ${w.label} - Tháng ${String(curMonth).padStart(2,'0')}/${curYear}</span>
+                        <span style="font-size:12px;color:var(--text-muted);">${w.end - w.start + 1} ngày</span>
+                    </div>
+                    <div style="overflow-x:auto;">
+                        ${renderWeekTableHtml(w, displayStaff, canEdit)}
+                    </div>
+                </div>
+            `;
         });
-        html += `</tr>`;
-    });
-    html += `</tbody></table>`;
-    document.getElementById('schedule-grid').innerHTML = html;
+        grid.innerHTML = allHtml;
+    }
 }
 
 function openAddShift() { openShiftFor('',''); }
@@ -714,12 +901,14 @@ async function deleteCurrentShift() {
 function prevMonth() {
     curMonth--; if (curMonth < 1) { curMonth=12; curYear--; }
     document.getElementById('schedule-month').value = `${curYear}-${String(curMonth).padStart(2,'0')}`;
+    currentWeekNum = 1;
     loadSchedule();
 }
 
 function nextMonth() {
     curMonth++; if (curMonth > 12) { curMonth=1; curYear++; }
     document.getElementById('schedule-month').value = `${curYear}-${String(curMonth).padStart(2,'0')}`;
+    currentWeekNum = 1;
     loadSchedule();
 }
 
@@ -923,19 +1112,35 @@ async function triggerQuickCheck(action) {
         return;
     }
 
-    const res = await apiCall('/api/attendance/quick-check', 'POST', {
-        staff_id: parseInt(staffId),
-        action: action,
-        note: note
-    });
+    // Instant button feedback
+    const btnIn = document.querySelector('.btn-success[onclick*="check_in"]');
+    const btnOut = document.querySelector('.btn-danger[onclick*="check_out"]');
+    const activeBtn = action === 'check_in' ? btnIn : btnOut;
+    const origHTML = activeBtn ? activeBtn.innerHTML : null;
+    if (btnIn) btnIn.disabled = true;
+    if (btnOut) btnOut.disabled = true;
+    if (activeBtn) {
+        activeBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    }
 
-    if (res.success) {
-        showToast(res.message || 'Chấm công thành công!');
-        document.getElementById('quick-note').value = '';
-        checkQuickStaffStatus();
-        loadAttendance();
-    } else {
-        showToast(res.message || 'Lỗi chấm công!', 'error');
+    try {
+        const res = await apiCall('/api/attendance/quick-check', 'POST', {
+            staff_id: parseInt(staffId),
+            action: action,
+            note: note
+        });
+
+        if (res.success) {
+            showToast(res.message || 'Chấm công thành công!');
+            document.getElementById('quick-note').value = '';
+            Promise.all([checkQuickStaffStatus(), loadAttendance()]);
+        } else {
+            showToast(res.message || 'Lỗi chấm công!', 'error');
+        }
+    } finally {
+        if (btnIn) btnIn.disabled = false;
+        if (btnOut) btnOut.disabled = false;
+        if (activeBtn && origHTML) activeBtn.innerHTML = origHTML;
     }
 }
 

@@ -468,6 +468,19 @@ async function submitOrder(actionType) {
         return;
     }
 
+    // Instant button loading feedback
+    const btnPending = document.querySelector('.cart-action-buttons .btn-secondary');
+    const btnCheckout = document.querySelector('.cart-action-buttons .btn-primary');
+    const activeBtn = actionType === 'checkout' ? btnCheckout : btnPending;
+    const origHTML = activeBtn ? activeBtn.innerHTML : null;
+    if (activeBtn) {
+        activeBtn.disabled = true;
+        activeBtn.style.opacity = '0.7';
+        activeBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang xử lý...';
+    }
+    if (btnPending) btnPending.disabled = true;
+    if (btnCheckout) btnCheckout.disabled = true;
+
     const tableId = document.getElementById('cart-table-select').value || null;
     const staffId = document.getElementById('cart-staff-select').value || 1;
     const notes = document.getElementById('order-notes-input').value.trim();
@@ -547,23 +560,31 @@ async function submitOrder(actionType) {
     } catch (e) {
         console.error('Submit order error:', e);
         showToast('Có lỗi xảy ra khi lưu đơn!', 'error');
+    } finally {
+        // Always restore buttons
+        if (btnPending) { btnPending.disabled = false; }
+        if (btnCheckout) { btnCheckout.disabled = false; }
+        if (activeBtn && origHTML) { activeBtn.style.opacity = ''; activeBtn.innerHTML = origHTML; }
     }
 }
+
+let activePendingOrdersList = [];
 
 // Refresh Active Pending Orders
 async function refreshActiveOrders() {
     try {
         const pendingOrders = await apiCall('/api/orders?status=pending');
-        document.getElementById('active-orders-count').textContent = pendingOrders.length;
+        activePendingOrdersList = pendingOrders || [];
+        document.getElementById('active-orders-count').textContent = activePendingOrdersList.length;
         
         const tbody = document.getElementById('active-orders-tbody');
-        if (!pendingOrders || pendingOrders.length === 0) {
+        if (!activePendingOrdersList || activePendingOrdersList.length === 0) {
             tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 20px;">Không có đơn hàng nào đang chờ phục vụ.</td></tr>`;
             return;
         }
 
-        tbody.innerHTML = pendingOrders.map(o => `
-            <tr>
+        tbody.innerHTML = activePendingOrdersList.map(o => `
+            <tr id="active-order-row-${o.id}">
                 <td><strong>#HD${String(o.id).padStart(5, '0')}</strong></td>
                 <td><span class="badge badge-warning">${o.table_number || 'Mang về'}</span></td>
                 <td>${o.created_at ? o.created_at.substring(11, 16) : ''}</td>
@@ -587,11 +608,14 @@ function toggleActiveOrdersModal() {
     openModal('active-orders-modal');
 }
 
-// Load a pending order into current POS cart
+// Load a pending order into current POS cart (Instant from cache)
 async function loadOrderToPOS(orderId) {
     try {
-        const orders = await apiCall(`/api/orders`);
-        const order = orders.find(o => o.id === orderId);
+        let order = (activePendingOrdersList || []).find(o => o.id === orderId);
+        if (!order) {
+            const orders = await apiCall(`/api/orders`);
+            order = orders.find(o => o.id === orderId);
+        }
         if (!order) return;
 
         closeModal('active-orders-modal');
@@ -613,20 +637,30 @@ async function loadOrderToPOS(orderId) {
     }
 }
 
-// Cancel a pending order
+// Cancel a pending order (Optimistic removal)
 function cancelPendingOrder(orderId) {
     showConfirm('Hủy đơn hàng', `Bạn có chắc chắn muốn hủy đơn hàng #HD${String(orderId).padStart(5, '0')} không?`, async () => {
+        // Optimistic UI removal
+        const row = document.getElementById(`active-order-row-${orderId}`);
+        if (row) row.style.display = 'none';
+        const countEl = document.getElementById('active-orders-count');
+        if (countEl && parseInt(countEl.textContent) > 0) {
+            countEl.textContent = parseInt(countEl.textContent) - 1;
+        }
+        showToast('Đã hủy đơn hàng!', 'success');
+
         try {
             const res = await apiCall(`/api/orders/${orderId}`, 'DELETE');
             if (res.success) {
-                showToast('Đã hủy đơn hàng!', 'success');
                 refreshActiveOrders();
                 allTables = await apiCall('/api/tables');
                 renderTableSelector();
             } else {
+                if (row) row.style.display = '';
                 showToast(res.message || 'Không thể hủy đơn', 'error');
             }
         } catch (e) {
+            if (row) row.style.display = '';
             showToast('Lỗi khi hủy đơn hàng', 'error');
         }
     });

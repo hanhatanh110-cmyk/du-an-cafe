@@ -656,18 +656,39 @@ function openTableDetails(tableId) {
 // ── Quick Change Status ──
 async function quickChangeStatus(newStatus) {
     if (!currentSelectedTable) return;
+    const oldStatus = currentSelectedTable.status;
+    const tableId = currentSelectedTable.id;
+    const tableNumber = currentSelectedTable.number;
+
+    // 1. Optimistic update in memory
+    currentSelectedTable.status = newStatus;
+    const found = allTables.find(t => t.id === tableId);
+    if (found) found.status = newStatus;
+
+    // 2. Instant UI feedback (0ms delay)
+    closeModal('table-action-modal');
+    renderAreasAndTables();
+    updateStatusCounts();
+    showToast(`Đã chuyển trạng thái bàn ${tableNumber}!`);
+
+    // 3. Asynchronously sync with server
     try {
-        const res = await apiCall(`/api/tables/${currentSelectedTable.id}`, 'PUT', {
+        const res = await apiCall(`/api/tables/${tableId}`, 'PUT', {
             status: newStatus
         });
-        if (res.success) {
-            showToast(`Đã chuyển trạng thái bàn ${currentSelectedTable.number}!`);
-            closeModal('table-action-modal');
-            loadData();
-        } else {
+        if (!res.success) {
+            // Revert on failure
+            if (found) found.status = oldStatus;
+            currentSelectedTable.status = oldStatus;
+            renderAreasAndTables();
+            updateStatusCounts();
             showToast(res.message || 'Lỗi cập nhật trạng thái', 'error');
         }
     } catch (e) {
+        if (found) found.status = oldStatus;
+        currentSelectedTable.status = oldStatus;
+        renderAreasAndTables();
+        updateStatusCounts();
         showToast('Lỗi khi cập nhật bàn', 'error');
     }
 }

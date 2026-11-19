@@ -376,6 +376,7 @@ class User(db.Model):
             'full_name': self.full_name,
             'role': self.role,
             'staff_id': self.staff_id,
+            'staff_name': self.staff.name if self.staff else None,
             'active': bool(self.active),
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else '',
             'last_login': self.last_login.strftime('%Y-%m-%d %H:%M:%S') if self.last_login else ''

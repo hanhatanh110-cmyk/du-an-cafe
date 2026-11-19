@@ -174,9 +174,15 @@
         try {
             const res = await apiCall('/api/auth/me');
             if (res.logged_in) {
-                const roleMap = {owner:'Chủ quán', manager:'Quản lý', cashier:'Thu ngân', barista:'Pha chế', waiter:'Phục vụ'};
+                const roleMap = {
+                    owner: '<i class="fas fa-crown" style="color:var(--primary-gold);"></i> Chủ quán',
+                    manager: '<i class="fas fa-shield-halved" style="color:#5a9fd4;"></i> Quản lý',
+                    cashier: '<i class="fas fa-calculator" style="color:#e8a040;"></i> Thu ngân',
+                    barista: '<i class="fas fa-blender" style="color:#a070d0;"></i> Pha chế',
+                    waiter: '<i class="fas fa-person-walking" style="color:#4caf80;"></i> Phục vụ'
+                };
                 document.getElementById('user-display-name').textContent = res.user.full_name;
-                document.getElementById('user-display-role').textContent = roleMap[res.user.role] || res.user.role;
+                document.getElementById('user-display-role').innerHTML = roleMap[res.user.role] || res.user.role;
                 window._currentUser = res.user;
 
                 // Restrict UI navigation links based on role
@@ -188,19 +194,48 @@
     }
 
     function applyNavRoleRestrictions(role) {
-        // If not owner/manager, hide salary nav
-        if (!['owner', 'manager'].includes(role)) {
-            const salaryNav = document.querySelector('a[href="/salary"]');
-            if (salaryNav && salaryNav.closest('.nav-item')) {
-                salaryNav.closest('.nav-item').style.display = 'none';
+        const hideNav = (selector) => {
+            const el = document.querySelector(selector);
+            if (el && el.closest('.nav-item')) {
+                el.closest('.nav-item').style.display = 'none';
             }
+        };
+
+        // 1. Chủ quán (owner): Toàn quyền xem mọi menu
+        if (role === 'owner') {
+            return;
         }
-        // If barista, direct attention to barista view
-        if (role === 'barista') {
-            const staffNav = document.querySelector('a[href="/staff"]');
-            if (staffNav && staffNav.closest('.nav-item')) {
-                staffNav.closest('.nav-item').style.display = 'none';
-            }
+
+        // 2. Quản lý (manager): Xem hầu hết, ẩn Bảng lương
+        if (role === 'manager') {
+            hideNav('a[href="/salary"]');
+            return;
+        }
+
+        // 3. Thu ngân (cashier):
+        // Xem: Bán hàng (POS), Quản lý bàn, Thẻ thành viên, Mã giảm giá, Ca làm & Chấm công, Pha chế
+        // Ẩn: Tổng quan, Thực đơn, Kho nguyên liệu, Nhân sự, Bảng lương
+        if (role === 'cashier') {
+            hideNav('a[href="/"]');
+            hideNav('a[href="/menu"]');
+            hideNav('a[href="/ingredients"]');
+            hideNav('a[href="/staff"]');
+            hideNav('a[href="/salary"]');
+            return;
+        }
+
+        // 4. Nhân viên (waiter / barista):
+        // Xem: Bán hàng (POS), Quản lý bàn, Ca làm & Chấm công, Màn hình pha chế
+        // Ẩn: Tổng quan, Thực đơn, Thẻ thành viên, Kho nguyên liệu, Mã giảm giá, Nhân sự, Bảng lương
+        if (role === 'waiter' || role === 'barista') {
+            hideNav('a[href="/"]');
+            hideNav('a[href="/menu"]');
+            hideNav('a[href="/members"]');
+            hideNav('a[href="/ingredients"]');
+            hideNav('a[href="/vouchers"]');
+            hideNav('a[href="/staff"]');
+            hideNav('a[href="/salary"]');
+            return;
         }
     }
 

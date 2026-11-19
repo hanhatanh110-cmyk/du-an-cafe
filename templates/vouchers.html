@@ -349,18 +349,33 @@ async function submitEditVoucher(e) {
     }
 }
 
-// Delete Voucher
+// Delete Voucher (Optimistic removal)
 function deleteVoucher(id, code) {
     showConfirm('Xác nhận xóa voucher', `Bạn có chắc chắn muốn xóa mã "${code}" vĩnh viễn không?`, async () => {
+        // Optimistic UI removal
+        const deletedIndex = allVouchersList.findIndex(v => v.id === id);
+        const deletedItem = deletedIndex !== -1 ? allVouchersList[deletedIndex] : null;
+        if (deletedIndex !== -1) {
+            allVouchersList.splice(deletedIndex, 1);
+            renderVouchersTable(allVouchersList);
+        }
+        showToast('Đã xóa mã voucher!');
+
         try {
             const res = await apiCall(`/api/vouchers/${id}`, 'DELETE');
-            if (res.success) {
-                showToast('Đã xóa mã voucher!');
-                loadVouchers();
-            } else {
+            if (!res.success) {
+                // Revert on failure
+                if (deletedItem) {
+                    allVouchersList.splice(deletedIndex, 0, deletedItem);
+                    renderVouchersTable(allVouchersList);
+                }
                 showToast(res.message || 'Không thể xóa', 'error');
             }
         } catch (e) {
+            if (deletedItem) {
+                allVouchersList.splice(deletedIndex, 0, deletedItem);
+                renderVouchersTable(allVouchersList);
+            }
             showToast('Lỗi khi xóa voucher', 'error');
         }
     });

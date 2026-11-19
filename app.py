@@ -47,8 +47,10 @@ def require_role(*roles):
 
 @app.route('/login', methods=['GET'])
 def login_page():
-    if get_current_user():
-        return redirect('/')
+    u = get_current_user()
+    if u:
+        redirect_map = {'owner': '/', 'manager': '/', 'cashier': '/orders', 'barista': '/barista', 'waiter': '/tables'}
+        return redirect(redirect_map.get(u.role, '/'))
     return render_template('login.html')
 
 @app.route('/api/auth/login', methods=['POST'])
@@ -63,7 +65,8 @@ def api_login():
     session['user_role'] = user.role
     user.last_login = datetime.now()
     db.session.commit()
-    return jsonify({'success': True, 'user': user.to_dict()})
+    redirect_map = {'owner': '/', 'manager': '/', 'cashier': '/orders', 'barista': '/barista', 'waiter': '/tables'}
+    return jsonify({'success': True, 'user': user.to_dict(), 'redirect_url': redirect_map.get(user.role, '/')})
 
 @app.route('/api/auth/logout', methods=['POST'])
 def api_logout():
@@ -77,49 +80,76 @@ def api_me():
         return jsonify({'logged_in': False})
     return jsonify({'logged_in': True, 'user': u.to_dict()})
 
+@app.route('/api/users', methods=['POST'])
 @app.route('/api/auth/register', methods=['POST'])
-def api_register():
-    # Only owner can create accounts
-    # But for initial setup, allow if no users exist
+def api_create_user():
+    # Account creation is managed internally in Staff Management
+    current_user = get_current_user()
+    existing_users = User.query.count()
+    
+    if existing_users > 0:
+        if not current_user or current_user.role not in ['owner', 'manager']:
+            return jsonify({'success': False, 'message': 'Chỉ Chủ quán hoặc Quản lý mới có quyền cấp tài khoản!'}), 403
+
     data = request.json or {}
     username = data.get('username', '').strip()
     password = data.get('password', '').strip()
     full_name = data.get('full_name', '').strip()
     role = data.get('role', 'waiter').strip()
+    staff_id = data.get('staff_id')
+    if staff_id:
+        try:
+            staff_id = int(staff_id)
+        except (ValueError, TypeError):
+            staff_id = None
 
     if not username or not password or not full_name:
-        return jsonify({'success': False, 'message': 'Vui lòng điền đầy đủ thông tin!'})
+        return jsonify({'success': False, 'message': 'Vui lòng điền đầy đủ: Tên đăng nhập, Mật khẩu, Họ tên!'}), 400
 
-    # Check if any users exist - if yes, only owner can register
-    existing_users = User.query.count()
-    if existing_users > 0:
-        current_user = get_current_user()
-        if not current_user or current_user.role != 'owner':
-            return jsonify({'success': False, 'message': 'Chỉ chủ quán mới có thể tạo tài khoản mới!'})
-
-    if User.query.filter_by(username=username).first():
-        return jsonify({'success': False, 'message': 'Tên đăng nhập đã tồn tại!'})
+    if len(password) < 6:
+        return jsonify({'success': False, 'message': 'Mật khẩu phải có tối thiểu 6 ký tự!'}), 400
 
     allowed_roles = ['owner', 'manager', 'cashier', 'barista', 'waiter']
     if role not in allowed_roles:
         role = 'waiter'
 
-    user = User(username=username, full_name=full_name, role=role, active=True)
+    # Manager restriction: cannot create owner or manager accounts
+    if current_user and current_user.role == 'manager' and role in ['owner', 'manager']:
+        return jsonify({'success': False, 'message': 'Quản lý chỉ được cấp tài khoản cho Thu ngân hoặc Nhân viên!'}), 403
+
+    if User.query.filter_by(username=username).first():
+        return jsonify({'success': False, 'message': f'Tên đăng nhập "{username}" đã tồn tại! Vui lòng chọn tên khác.'}), 400
+
+    user = User(
+        username=username,
+        full_name=full_name,
+        role=role,
+        staff_id=staff_id,
+        active=True
+    )
     user.set_password(password)
     db.session.add(user)
     db.session.commit()
-    return jsonify({'success': True, 'message': f'Tạo tài khoản thành công! Vai trò: {role}', 'user': user.to_dict()})
+    
+    role_titles = {'owner': 'Chủ quán', 'manager': 'Quản lý', 'cashier': 'Thu ngân', 'barista': 'Pha chế', 'waiter': 'Phục vụ'}
+    return jsonify({
+        'success': True,
+        'message': f'Đã cấp tài khoản thành công cho {full_name} ({role_titles.get(role, role)})!',
+        'user': user.to_dict()
+    })
 
 @app.route('/api/auth/change-password', methods=['POST'])
 def change_password():
     u = get_current_user()
     if not u:
-        return jsonify({'success': False, 'message': 'Chưa đăng nhập!'})
+        return jsonify({'success': False, 'message': 'Chưa đăng nhập!'}), 401
     data = request.json or {}
     old_pw = data.get('old_password', '')
     new_pw = data.get('new_password', '')
     if not u.check_password(old_pw):
-        return jsonify({'success': False, 'message': 'Mật khẩu cũ không đúng!'})
+        return jsonify({'success': False, 'message': 'Mật khẩu cũ không đúng!'}), 400
+    if len(new_pw) < 6:
+        return jsonify({'success': False, 'message': 'Mật khẩu mới tối thiểu 6 ký tự!'}), 400
     u.set_password(new_pw)
     db.session.commit()
     return jsonify({'success': True, 'message': 'Đổi mật khẩu thành công!'})
@@ -128,37 +158,71 @@ def change_password():
 def get_users():
     u = get_current_user()
     if not u or u.role not in ['owner', 'manager']:
-        return jsonify({'success': False, 'message': 'Không có quyền!'}), 403
-    users = User.query.all()
+        return jsonify({'success': False, 'message': 'Không có quyền truy cập danh sách tài khoản!'}), 403
+    users = User.query.order_by(User.id.asc()).all()
     return jsonify([usr.to_dict() for usr in users])
 
 @app.route('/api/users/<id>', methods=['PUT'])
 def update_user(id):
     current = get_current_user()
-    if not current or current.role != 'owner':
-        return jsonify({'success': False, 'message': 'Chỉ chủ quán mới được thay đổi tài khoản!'}), 403
+    if not current or current.role not in ['owner', 'manager']:
+        return jsonify({'success': False, 'message': 'Không có quyền thay đổi tài khoản!'}), 403
+    
     user = User.query.get(id)
     if not user:
-        return jsonify({'success': False, 'message': 'Không tìm thấy tài khoản!'})
+        return jsonify({'success': False, 'message': 'Không tìm thấy tài khoản!'}), 404
+
+    # Manager restriction
+    if current.role == 'manager':
+        if user.role in ['owner', 'manager'] and user.id != current.id:
+            return jsonify({'success': False, 'message': 'Quản lý không được chỉnh sửa tài khoản của Chủ quán hoặc Quản lý khác!'}), 403
+
     data = request.json or {}
-    if 'full_name' in data: user.full_name = data['full_name']
-    if 'role' in data: user.role = data['role']
-    if 'active' in data: user.active = bool(data['active'])
-    if 'password' in data and data['password']: user.set_password(data['password'])
+    if 'full_name' in data and data['full_name']:
+        user.full_name = data['full_name'].strip()
+
+    if 'role' in data and data['role']:
+        new_role = data['role']
+        if current.role == 'manager' and new_role in ['owner', 'manager']:
+            return jsonify({'success': False, 'message': 'Quản lý không thể thăng cấp tài khoản lên Chủ quán hoặc Quản lý!'}), 403
+        user.role = new_role
+
+    if 'staff_id' in data:
+        user.staff_id = int(data['staff_id']) if data['staff_id'] else None
+
+    if 'active' in data:
+        # Cannot deactivate own account
+        if user.id == current.id and not bool(data['active']):
+            return jsonify({'success': False, 'message': 'Không thể tự vô hiệu hóa tài khoản của chính mình!'}), 400
+        user.active = bool(data['active'])
+
+    if 'password' in data and data['password']:
+        if len(data['password']) < 6:
+            return jsonify({'success': False, 'message': 'Mật khẩu phải tối thiểu 6 ký tự!'}), 400
+        user.set_password(data['password'])
+
     db.session.commit()
     return jsonify({'success': True, 'message': 'Cập nhật tài khoản thành công!', 'user': user.to_dict()})
 
 @app.route('/api/users/<id>', methods=['DELETE'])
 def delete_user(id):
     current = get_current_user()
-    if not current or current.role != 'owner':
-        return jsonify({'success': False, 'message': 'Chỉ chủ quán mới được xóa tài khoản!'}), 403
+    if not current or current.role not in ['owner', 'manager']:
+        return jsonify({'success': False, 'message': 'Không có quyền xóa tài khoản!'}), 403
+
     user = User.query.get(id)
     if not user:
-        return jsonify({'success': False, 'message': 'Không tìm thấy!'})
+        return jsonify({'success': False, 'message': 'Không tìm thấy tài khoản!'}), 404
+
+    if user.id == current.id:
+        return jsonify({'success': False, 'message': 'Không thể xóa tài khoản bạn đang đăng nhập!'}), 400
+
+    if current.role == 'manager' and user.role in ['owner', 'manager']:
+        return jsonify({'success': False, 'message': 'Quản lý không có quyền xóa tài khoản Chủ quán hoặc Quản lý!'}), 403
+
     db.session.delete(user)
     db.session.commit()
-    return jsonify({'success': True, 'message': 'Đã xóa tài khoản!'})
+    return jsonify({'success': True, 'message': f'Đã xóa tài khoản "{user.username}"!'})
 
 # ==============================================================================
 # SCHEDULE, SALARY, ORDER HISTORY & BARISTA ROUTES
@@ -167,6 +231,9 @@ def delete_user(id):
 # ── SCHEDULE ──
 @app.route('/schedule')
 def schedule_page():
+    u = get_current_user()
+    if not u:
+        return redirect('/login')
     return render_template('schedule.html', active_page='schedule')
 
 @app.route('/api/schedule', methods=['GET'])
@@ -355,6 +422,11 @@ def delete_attendance_record(id):
 # ── SALARY ──
 @app.route('/salary')
 def salary_page():
+    u = get_current_user()
+    if not u:
+        return redirect('/login')
+    if u.role not in ['owner', 'manager']:
+        return redirect('/')
     return render_template('salary.html', active_page='salary')
 
 @app.route('/api/salary', methods=['GET'])
@@ -508,36 +580,81 @@ def barista_complete_items():
 # PAGE ROUTES (HTML Templates)
 # ==============================================================================
 
+def get_user_home_url(role):
+    if role == 'cashier':
+        return '/orders'
+    elif role == 'barista':
+        return '/barista'
+    elif role == 'waiter':
+        return '/tables'
+    return '/'
+
 @app.route('/')
 def index():
+    u = get_current_user()
+    if not u:
+        return redirect('/login')
+    if u.role not in ['owner', 'manager']:
+        return redirect(get_user_home_url(u.role))
     return render_template('index.html', active_page='dashboard')
 
 @app.route('/menu')
 def menu_page():
+    u = get_current_user()
+    if not u:
+        return redirect('/login')
+    if u.role not in ['owner', 'manager']:
+        return redirect(get_user_home_url(u.role))
     return render_template('menu.html', active_page='menu')
 
 @app.route('/orders')
 def orders_page():
+    u = get_current_user()
+    if not u:
+        return redirect('/login')
     return render_template('orders.html', active_page='orders')
 
 @app.route('/tables')
 def tables_page():
+    u = get_current_user()
+    if not u:
+        return redirect('/login')
     return render_template('tables.html', active_page='tables')
 
 @app.route('/staff')
 def staff_page():
+    u = get_current_user()
+    if not u:
+        return redirect('/login')
+    if u.role not in ['owner', 'manager']:
+        return redirect(get_user_home_url(u.role))
     return render_template('staff.html', active_page='staff')
 
 @app.route('/vouchers')
 def vouchers_page():
+    u = get_current_user()
+    if not u:
+        return redirect('/login')
+    if u.role not in ['owner', 'manager', 'cashier']:
+        return redirect(get_user_home_url(u.role))
     return render_template('vouchers.html', active_page='vouchers')
 
 @app.route('/ingredients')
 def ingredients_page():
+    u = get_current_user()
+    if not u:
+        return redirect('/login')
+    if u.role not in ['owner', 'manager']:
+        return redirect(get_user_home_url(u.role))
     return render_template('ingredients.html', active_page='ingredients')
 
 @app.route('/members')
 def members_page():
+    u = get_current_user()
+    if not u:
+        return redirect('/login')
+    if u.role not in ['owner', 'manager', 'cashier']:
+        return redirect(get_user_home_url(u.role))
     return render_template('members.html', active_page='members')
 
 # ==============================================================================
@@ -1307,7 +1424,16 @@ def get_bill(id):
 def get_staff():
     try:
         staff_list = Staff.query.all()
-        return jsonify([s.to_dict() for s in staff_list])
+        # Find users associated with staff
+        users = User.query.filter(User.staff_id.isnot(None)).all()
+        user_by_staff_id = {u.staff_id: {'id': u.id, 'username': u.username, 'role': u.role, 'active': u.active} for u in users}
+        
+        result = []
+        for s in staff_list:
+            d = s.to_dict()
+            d['user_account'] = user_by_staff_id.get(s.id)
+            result.append(d)
+        return jsonify(result)
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -1331,6 +1457,24 @@ def add_staff():
         )
         db.session.add(staff)
         db.session.commit()
+
+        # Optional: create linked login account
+        username = data.get('username', '').strip()
+        password = data.get('password', '').strip()
+        account_role = data.get('account_role') or role
+        if username and password:
+            if not User.query.filter_by(username=username).first():
+                user = User(
+                    username=username,
+                    full_name=name,
+                    role=account_role,
+                    staff_id=staff.id,
+                    active=True
+                )
+                user.set_password(password)
+                db.session.add(user)
+                db.session.commit()
+
         return jsonify({'success': True, 'message': 'Thêm nhân viên thành công!', 'staff': staff.to_dict()}), 201
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500

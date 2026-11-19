@@ -13,10 +13,6 @@
         .login-logo .icon { width:64px; height:64px; background: linear-gradient(135deg,#c8a97e,#8f6e45); border-radius:16px; display:inline-flex; align-items:center; justify-content:center; font-size:28px; color:#111; margin-bottom:12px; }
         .login-logo h2 { font-size:22px; font-weight:700; color:var(--text-primary); }
         .login-logo p { font-size:13px; color:var(--text-muted); }
-        .tab-btns { display:flex; gap:0; margin-bottom:24px; border-radius:var(--radius-sm); overflow:hidden; border:1px solid var(--border-subtle); }
-        .tab-btn { flex:1; padding:10px; background:transparent; border:none; color:var(--text-secondary); font-size:14px; font-weight:500; cursor:pointer; transition:all 0.2s; }
-        .tab-btn.active { background:var(--primary-gold); color:#111; font-weight:700; }
-        .role-select option { background:#1c1d21; }
     </style>
 </head>
 <body>
@@ -25,11 +21,6 @@
             <div class="icon"><i class="fas fa-mug-hot"></i></div>
             <h2>CAFE ANTIGRAVITY</h2>
             <p>Hệ thống quản lý quán cà phê</p>
-        </div>
-
-        <div class="tab-btns">
-            <button class="tab-btn active" id="tab-login" onclick="showTab('login')">Đăng nhập</button>
-            <button class="tab-btn" id="tab-register" onclick="showTab('register')">Tạo tài khoản</button>
         </div>
 
         <!-- Login Form -->
@@ -56,48 +47,17 @@
             <button class="btn btn-primary" style="width:100%;" onclick="doLogin()">
                 <i class="fas fa-sign-in-alt"></i> Đăng nhập
             </button>
-        </div>
 
-        <!-- Register Form -->
-        <div id="form-register" style="display:none;">
-            <div class="form-group">
-                <label class="form-label">Họ và tên</label>
-                <input type="text" id="reg-fullname" class="form-control" placeholder="Nguyễn Văn A">
+            <div style="text-align: center; margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--border-subtle); font-size: 12px; color: var(--text-muted); line-height: 1.6;">
+                <i class="fas fa-shield-halved" style="color: var(--primary-gold);"></i> <strong>Hệ thống quản lý nội bộ</strong><br>
+                Tài khoản được cấp và quản lý tập trung bởi <strong>Chủ quán / Quản lý</strong> trong mục Nhân sự.
             </div>
-            <div class="form-group">
-                <label class="form-label">Tên đăng nhập</label>
-                <input type="text" id="reg-username" class="form-control" placeholder="vd: nhanvien01">
-            </div>
-            <div class="form-group">
-                <label class="form-label">Mật khẩu</label>
-                <input type="password" id="reg-password" class="form-control" placeholder="Tối thiểu 6 ký tự">
-            </div>
-            <div class="form-group">
-                <label class="form-label">Vai trò</label>
-                <select id="reg-role" class="form-control role-select">
-                    <option value="owner">Chủ quán (Owner)</option>
-                    <option value="manager">Quản lý (Manager)</option>
-                    <option value="cashier">Thu ngân (Cashier)</option>
-                    <option value="barista" selected>Pha chế (Barista)</option>
-                    <option value="waiter">Phục vụ (Waiter)</option>
-                </select>
-            </div>
-            <div id="reg-error" style="color:var(--danger);font-size:13px;margin-bottom:12px;display:none;"></div>
-            <button class="btn btn-primary" style="width:100%;" onclick="doRegister()">
-                <i class="fas fa-user-plus"></i> Tạo tài khoản
-            </button>
         </div>
     </div>
 
     <div id="toast-container" class="toast-container"></div>
     <script src="/static/js/main.js"></script>
     <script>
-    function showTab(tab) {
-        document.getElementById('form-login').style.display = tab === 'login' ? '' : 'none';
-        document.getElementById('form-register').style.display = tab === 'register' ? '' : 'none';
-        document.getElementById('tab-login').classList.toggle('active', tab === 'login');
-        document.getElementById('tab-register').classList.toggle('active', tab === 'register');
-    }
     async function doLogin() {
         const username = document.getElementById('login-username').value.trim();
         const password = document.getElementById('login-password').value;
@@ -107,25 +67,9 @@
         if (res.success) { window.location.href = '/'; }
         else { errEl.textContent = res.message || 'Đăng nhập không thành công!'; errEl.style.display = ''; }
     }
-    async function doRegister() {
-        const full_name = document.getElementById('reg-fullname').value.trim();
-        const username = document.getElementById('reg-username').value.trim();
-        const password = document.getElementById('reg-password').value;
-        const role = document.getElementById('reg-role').value;
-        const errEl = document.getElementById('reg-error');
-        if (!full_name || !username || !password) { errEl.textContent='Vui lòng điền đầy đủ!'; errEl.style.display=''; return; }
-        if (password.length < 6) { errEl.textContent='Mật khẩu tối thiểu 6 ký tự!'; errEl.style.display=''; return; }
-        const res = await apiCall('/api/auth/register', 'POST', {username, password, full_name, role});
-        if (res.success) { 
-            showToast(res.message || 'Tạo tài khoản thành công!', 'success'); 
-            setTimeout(() => showTab('login'), 1500); 
-        }
-        else { errEl.textContent = res.message || 'Lỗi tạo tài khoản!'; errEl.style.display = ''; }
-    }
     document.addEventListener('keydown', e => { 
         if (e.key === 'Enter') { 
-            const tab = document.getElementById('form-login').style.display !== 'none' ? 'login' : 'register'; 
-            tab === 'login' ? doLogin() : doRegister(); 
+            doLogin(); 
         }
     });
     </script>

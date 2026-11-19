@@ -337,22 +337,44 @@ function openRestockModal(id) {
     openModal('restock-modal');
 }
 
-// Submit Quick Restock
+// Submit Quick Restock (Optimistic update)
 async function submitQuickRestock(e) {
     e.preventDefault();
-    const id = document.getElementById('restock-ing-id').value;
-    const addQty = document.getElementById('restock-add-qty').value;
+    const id = parseInt(document.getElementById('restock-ing-id').value);
+    const addQty = parseFloat(document.getElementById('restock-add-qty').value) || 0;
 
+    // 1. Instant local update
+    const ing = allIngredientsList.find(i => i.id === id);
+    const oldQty = ing ? ing.quantity : 0;
+    if (ing) {
+        ing.quantity = (parseFloat(ing.quantity) || 0) + addQty;
+        ing.is_low_stock = ing.quantity <= ing.min_quantity;
+    }
+    closeModal('restock-modal');
+    filterIngredientsTable();
+    updateSummaryCards();
+    showToast('Đã nhập thêm hàng vào kho thành công!');
+
+    // 2. Background API sync
     try {
         const res = await apiCall(`/api/ingredients/${id}`, 'PUT', { add_quantity: addQty });
-        if (res.success) {
-            showToast('Đã nhập thêm hàng vào kho thành công!');
-            closeModal('restock-modal');
-            loadIngredients();
-        } else {
+        if (!res.success) {
+            // Revert on failure
+            if (ing) {
+                ing.quantity = oldQty;
+                ing.is_low_stock = ing.quantity <= ing.min_quantity;
+                filterIngredientsTable();
+                updateSummaryCards();
+            }
             showToast(res.message || 'Lỗi nhập hàng', 'error');
         }
     } catch (e) {
+        if (ing) {
+            ing.quantity = oldQty;
+            ing.is_low_stock = ing.quantity <= ing.min_quantity;
+            filterIngredientsTable();
+            updateSummaryCards();
+        }
         showToast('Lỗi khi nhập kho', 'error');
     }
 }
@@ -432,18 +454,36 @@ async function submitEditIngredient(e) {
     }
 }
 
-// Delete Ingredient
+// Delete Ingredient (Optimistic removal)
 function deleteIngredient(id, name) {
     showConfirm('Xác nhận xóa nguyên liệu', `Bạn có chắc chắn muốn xóa "${name}" khỏi kho không?`, async () => {
+        // Optimistic UI removal
+        const deletedIndex = allIngredientsList.findIndex(i => i.id === id);
+        const deletedItem = deletedIndex !== -1 ? allIngredientsList[deletedIndex] : null;
+        if (deletedIndex !== -1) {
+            allIngredientsList.splice(deletedIndex, 1);
+            filterIngredientsTable();
+            updateSummaryCards();
+        }
+        showToast('Đã xóa nguyên liệu khỏi kho!');
+
         try {
             const res = await apiCall(`/api/ingredients/${id}`, 'DELETE');
-            if (res.success) {
-                showToast('Đã xóa nguyên liệu khỏi kho!');
-                loadIngredients();
-            } else {
+            if (!res.success) {
+                // Revert on failure
+                if (deletedItem) {
+                    allIngredientsList.splice(deletedIndex, 0, deletedItem);
+                    filterIngredientsTable();
+                    updateSummaryCards();
+                }
                 showToast(res.message || 'Không thể xóa', 'error');
             }
         } catch (e) {
+            if (deletedItem) {
+                allIngredientsList.splice(deletedIndex, 0, deletedItem);
+                filterIngredientsTable();
+                updateSummaryCards();
+            }
             showToast('Lỗi khi xóa nguyên liệu', 'error');
         }
     });

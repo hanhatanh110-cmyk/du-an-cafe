@@ -293,17 +293,28 @@ function renderMenuTable(items) {
     `).join('');
 }
 
-// Toggle Item Availability
+// Toggle Item Availability (Optimistic update)
 async function toggleItemAvailability(id, newStatus) {
+    const item = fullMenuList.find(i => i.id === id);
+    const oldStatus = item ? item.available : !newStatus;
+
+    // 1. Instant local UI update
+    if (item) item.available = newStatus;
+    filterMenuTable();
+    showToast(`Đã chuyển trạng thái: ${newStatus ? 'Đang mở bán' : 'Tạm ngưng'}`);
+
+    // 2. Background API sync
     try {
         const res = await apiCall(`/api/menu/${id}`, 'PUT', { available: newStatus });
-        if (res.success) {
-            showToast(`Đã chuyển trạng thái: ${newStatus ? 'Đang mở bán' : 'Tạm ngưng'}`);
-            reloadMenu();
-        } else {
+        if (!res.success) {
+            // Revert
+            if (item) item.available = oldStatus;
+            filterMenuTable();
             showToast(res.message || 'Lỗi cập nhật', 'error');
         }
     } catch (e) {
+        if (item) item.available = oldStatus;
+        filterMenuTable();
         showToast('Lỗi khi đổi trạng thái món', 'error');
     }
 }
@@ -400,15 +411,30 @@ async function submitEditMenuItem(e) {
 // Delete Menu Item
 function deleteMenuItem(id, name) {
     showConfirm('Xác nhận xóa món', `Bạn có chắc chắn muốn xóa "${name}" khỏi thực đơn không?`, async () => {
+        // Optimistic removal
+        const deletedIndex = fullMenuList.findIndex(i => i.id === id);
+        const deletedItem = deletedIndex !== -1 ? fullMenuList[deletedIndex] : null;
+        if (deletedIndex !== -1) {
+            fullMenuList.splice(deletedIndex, 1);
+            filterMenuTable();
+        }
+        showToast('Đã xóa món thành công!');
+
         try {
             const res = await apiCall(`/api/menu/${id}`, 'DELETE');
-            if (res.success) {
-                showToast('Đã xóa món thành công!');
-                reloadMenu();
-            } else {
+            if (!res.success) {
+                // Revert on failure
+                if (deletedItem) {
+                    fullMenuList.splice(deletedIndex, 0, deletedItem);
+                    filterMenuTable();
+                }
                 showToast(res.message || 'Không thể xóa món', 'error');
             }
         } catch (e) {
+            if (deletedItem) {
+                fullMenuList.splice(deletedIndex, 0, deletedItem);
+                filterMenuTable();
+            }
             showToast('Lỗi khi xóa món', 'error');
         }
     });

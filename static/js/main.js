@@ -142,6 +142,57 @@ async function apiCall(url, method = 'GET', data = null) {
     }
 }
 
+// Button loading state helpers — give instant visual feedback on click
+function setButtonLoading(btn, loading, originalHTML) {
+    if (!btn) return;
+    if (loading) {
+        btn._origHTML = btn.innerHTML;
+        btn._origDisabled = btn.disabled;
+        btn.disabled = true;
+        btn.style.opacity = '0.7';
+        btn.innerHTML = `<i class="fas fa-spinner fa-spin" style="margin-right:5px"></i>${btn.dataset.loadingText || 'Đang xử lý...'}`;
+    } else {
+        btn.disabled = btn._origDisabled || false;
+        btn.style.opacity = '';
+        btn.innerHTML = originalHTML !== undefined ? originalHTML : (btn._origHTML || btn.innerHTML);
+    }
+}
+
+// apiCall with automatic button loading state
+async function apiCallBtn(btn, url, method = 'GET', data = null) {
+    const origHTML = btn ? btn.innerHTML : null;
+    if (btn) setButtonLoading(btn, true);
+    try {
+        const result = await apiCall(url, method, data);
+        return result;
+    } finally {
+        if (btn) setButtonLoading(btn, false, origHTML);
+    }
+}
+
+// Debounce helper — wrap any fn so it only fires after `delay` ms of silence
+function debounce(fn, delay = 300) {
+    let timer;
+    return function(...args) {
+        clearTimeout(timer);
+        timer = setTimeout(() => fn.apply(this, args), delay);
+    };
+}
+
+// Show skeleton loading rows inside a table tbody
+function showTableSkeleton(tbodyId, cols = 5, rows = 4) {
+    const tbody = document.getElementById(tbodyId);
+    if (!tbody) return;
+    const skeletonRow = `<tr>${Array(cols).fill('<td><div style="height:14px;border-radius:4px;background:var(--bg-hover);animation:skeleton-pulse 1.2s infinite alternate"></div></td>').join('')}</tr>`;
+    tbody.innerHTML = Array(rows).fill(skeletonRow).join('');
+}
+
+// Inline spinner for a container element
+function showSpinner(el, msg = '') {
+    if (!el) return;
+    el.innerHTML = `<div style="text-align:center;padding:32px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin fa-2x"></i>${msg ? `<p style="margin-top:10px;font-size:13px">${msg}</p>` : ''}</div>`;
+}
+
 // Live Clock Initializer
 function initClock() {
     const clockEl = document.getElementById('live-clock');
@@ -273,6 +324,25 @@ document.addEventListener('DOMContentLoaded', () => {
             if (e.target === modal) {
                 modal.classList.remove('show');
                 document.body.style.overflow = '';
+            }
+        });
+    });
+
+    // Auto loading state for all form submit buttons
+    document.querySelectorAll('form').forEach(form => {
+        form.addEventListener('submit', function() {
+            const btn = form.querySelector('button[type="submit"]');
+            if (btn && !btn.disabled) {
+                const orig = btn.innerHTML;
+                btn.disabled = true;
+                btn.style.opacity = '0.7';
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin" style="margin-right:5px"></i>Đang xử lý...';
+                // Auto-restore after 5s in case JS error prevents re-enable
+                setTimeout(() => {
+                    btn.disabled = false;
+                    btn.style.opacity = '';
+                    btn.innerHTML = orig;
+                }, 5000);
             }
         });
     });

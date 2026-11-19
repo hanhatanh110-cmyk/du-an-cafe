@@ -299,6 +299,19 @@ async function addMember() {
 }
 
 async function openEdit(id) {
+    const cached = allMembers.find(m => m.id === id);
+    if (cached) {
+        document.getElementById('edit-id').value     = cached.id;
+        document.getElementById('edit-code').value   = cached.card_code;
+        document.getElementById('edit-name').value   = cached.name;
+        document.getElementById('edit-email').value  = cached.email || '';
+        document.getElementById('edit-notes').value  = cached.notes || '';
+        document.getElementById('edit-active').value = cached.active ? '1' : '0';
+        document.getElementById('adj-points').value  = '';
+        document.getElementById('adj-reason').value  = '';
+        openModal('modal-edit-member');
+        return;
+    }
     const res = await apiCall(`/api/members/${id}`);
     if (!res.success) { showToast('Lỗi tải thông tin thành viên!', 'error'); return; }
     const m = res.member;
@@ -339,9 +352,12 @@ async function adjustPoints() {
 
 async function openHistory(id, name) {
     document.getElementById('hist-name').textContent = name;
-    const res = await apiCall(`/api/members/${id}`);
     const tbody = document.getElementById('txn-tbody');
-    if (!res.success || !res.transactions.length) {
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:16px;"><i class="fas fa-spinner fa-spin"></i> Đang tải...</td></tr>`;
+    openModal('modal-history');
+
+    const res = await apiCall(`/api/members/${id}`);
+    if (!res.success || !res.transactions || !res.transactions.length) {
         tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:16px;">Chưa có giao dịch nào.</td></tr>`;
     } else {
         const typeMap = { earn: '<span class="badge badge-success">Tích điểm</span>', redeem: '<span class="badge badge-warning">Đổi điểm</span>', adjust: '<span class="badge badge-info">Điều chỉnh</span>' };
@@ -354,7 +370,6 @@ async function openHistory(id, name) {
             </tr>
         `).join('');
     }
-    openModal('modal-history');
 }
 
 async function loadSettings() {
@@ -381,8 +396,7 @@ async function saveSettings() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    loadMembers();
-    loadSettings();
+    Promise.all([loadMembers(), loadSettings()]);
 });
 </script>
 {% endblock %}

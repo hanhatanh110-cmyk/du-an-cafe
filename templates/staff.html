@@ -1,51 +1,293 @@
 {% extends "base.html" %}
 
-{% block page_title %}Quản lý Nhân sự{% endblock %}
-{% block page_subtitle %}Danh sách nhân viên, phân quyền vai trò (Admin / Thu ngân / Phục vụ) & lương thưởng{% endblock %}
+{% block page_title %}Quản lý Nhân sự &amp; Tài khoản{% endblock %}
+{% block page_subtitle %}Hồ sơ nhân viên, cấp tài khoản đăng nhập nội bộ &amp; phân quyền 4 cấp chức vụ{% endblock %}
 
 {% block topbar_action %}
-<button class="btn btn-primary btn-sm" onclick="openAddStaffModal()">
-    <i class="fas fa-user-plus"></i> Thêm nhân viên mới
-</button>
+<div style="display: flex; gap: 8px; align-items: center;">
+    <button class="btn btn-secondary btn-sm" onclick="openAddUserModal()">
+        <i class="fas fa-key"></i> Cấp tài khoản mới
+    </button>
+    <button class="btn btn-primary btn-sm" onclick="openAddStaffModal()">
+        <i class="fas fa-user-plus"></i> Thêm nhân viên mới
+    </button>
+</div>
 {% endblock %}
 
 {% block content %}
-<!-- Staff Table Card -->
-<div class="card">
-    <div class="card-header">
-        <div class="card-title">
-            <i class="fas fa-users-gear"></i> Danh sách đội ngũ nhân viên (<span id="staff-count">0</span> người)
+<!-- Tab Switcher Navigation -->
+<div style="display:flex;gap:12px;margin-bottom:20px;border-bottom:1px solid var(--border-subtle);padding-bottom:12px;">
+    <button class="tab-btn active" id="tab-btn-staff" onclick="switchStaffTab('staff')">
+        <i class="fas fa-users-gear"></i> Hồ sơ nhân viên
+    </button>
+    <button class="tab-btn" id="tab-btn-users" onclick="switchStaffTab('users')">
+        <i class="fas fa-id-badge"></i> Tài khoản đăng nhập (<span id="user-count-badge">0</span>)
+    </button>
+    <button class="tab-btn" id="tab-btn-matrix" onclick="switchStaffTab('matrix')">
+        <i class="fas fa-shield-halved"></i> Bảng phân quyền 4 chức vụ
+    </button>
+</div>
+
+<!-- ============================================================== -->
+<!-- TAB 1: HỒ SƠ NHÂN VIÊN                                         -->
+<!-- ============================================================== -->
+<div id="view-staff-tab">
+    <!-- Summary Stat Cards -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:16px;margin-bottom:20px;">
+        <div class="card" style="padding:16px 20px;margin-bottom:0;">
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;">Tổng nhân sự</div>
+            <div id="stat-total-staff" style="font-size:24px;font-weight:800;color:var(--text-primary);">0</div>
+        </div>
+        <div class="card" style="padding:16px 20px;margin-bottom:0;">
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;">Đang làm việc</div>
+            <div id="stat-active-staff" style="font-size:24px;font-weight:800;color:var(--success);">0</div>
+        </div>
+        <div class="card" style="padding:16px 20px;margin-bottom:0;">
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;">Đã cấp tài khoản</div>
+            <div id="stat-linked-accounts" style="font-size:24px;font-weight:800;color:var(--primary-gold);">0</div>
+        </div>
+        <div class="card" style="padding:16px 20px;margin-bottom:0;">
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;">Tổng quỹ lương dự tính</div>
+            <div id="stat-total-salary" style="font-size:24px;font-weight:800;color:#9b59b6;">0 VND</div>
         </div>
     </div>
-    <div class="table-responsive">
-        <table class="table">
-            <thead>
-                <tr>
-                    <th>Họ và tên</th>
-                    <th>Vai trò / Chức vụ</th>
-                    <th>Số điện thoại</th>
-                    <th>Email</th>
-                    <th>Mức lương</th>
-                    <th>Ngày vào làm</th>
-                    <th>Trạng thái</th>
-                    <th style="text-align: right;">Thao tác</th>
-                </tr>
-            </thead>
-            <tbody id="staff-tbody">
-                <tr>
-                    <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 30px;">
-                        <i class="fas fa-spinner fa-spin fa-2x"></i>
-                        <p style="margin-top: 10px;">Đang tải danh sách nhân sự...</p>
-                    </td>
-                </tr>
-            </tbody>
-        </table>
+
+    <!-- Filter Bar -->
+    <div class="card" style="margin-bottom:16px;padding:14px 20px;">
+        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:space-between;">
+            <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+                <div>
+                    <label class="form-label" style="margin:0 0 4px 0;">Tìm kiếm</label>
+                    <input type="text" id="staff-search-input" class="form-control form-control-sm" style="width:200px;" placeholder="Tìm theo tên, sđt..." oninput="filterStaffTable()">
+                </div>
+                <div>
+                    <label class="form-label" style="margin:0 0 4px 0;">Chức vụ / Vai trò</label>
+                    <select id="staff-role-filter" class="form-select form-select-sm" style="width:170px;" onchange="filterStaffTable()">
+                        <option value="all">Tất cả chức vụ</option>
+                        <option value="owner">Chủ quán (Owner)</option>
+                        <option value="manager">Quản lý (Manager)</option>
+                        <option value="cashier">Thu ngân (Cashier)</option>
+                        <option value="waiter">Nhân viên phục vụ</option>
+                        <option value="barista">Nhân viên pha chế</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="form-label" style="margin:0 0 4px 0;">Trạng thái</label>
+                    <select id="staff-status-filter" class="form-select form-select-sm" style="width:150px;" onchange="filterStaffTable()">
+                        <option value="all">Tất cả trạng thái</option>
+                        <option value="active">Đang làm việc</option>
+                        <option value="inactive">Đã nghỉ việc</option>
+                    </select>
+                </div>
+            </div>
+            <button class="btn btn-secondary btn-sm" onclick="loadStaff()" style="margin-top:18px;">
+                <i class="fas fa-sync-alt"></i> Làm mới
+            </button>
+        </div>
+    </div>
+
+    <!-- Staff Table Card -->
+    <div class="card">
+        <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+            <div class="card-title">
+                <i class="fas fa-users-gear"></i> Danh sách đội ngũ nhân viên (<span id="staff-count">0</span> người)
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Họ và tên</th>
+                        <th>Chức vụ</th>
+                        <th>Tài khoản đăng nhập</th>
+                        <th>Số điện thoại</th>
+                        <th>Email</th>
+                        <th>Mức lương</th>
+                        <th>Ngày vào làm</th>
+                        <th>Trạng thái</th>
+                        <th style="text-align: right;">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody id="staff-tbody">
+                    <tr>
+                        <td colspan="9" style="text-align: center; color: var(--text-muted); padding: 30px;">
+                            <i class="fas fa-spinner fa-spin fa-2x"></i>
+                            <p style="margin-top: 10px;">Đang tải danh sách nhân sự...</p>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>
 
+<!-- ============================================================== -->
+<!-- TAB 2: TÀI KHOẢN ĐĂNG NHẬP HỆ THỐNG                            -->
+<!-- ============================================================== -->
+<div id="view-users-tab" style="display:none;">
+    <div class="card" style="margin-bottom:16px;border-left:4px solid var(--primary-gold);">
+        <div style="padding:14px 20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+            <div style="display:flex;align-items:center;gap:12px;">
+                <i class="fas fa-shield-halved" style="font-size:24px;color:var(--primary-gold);"></i>
+                <div>
+                    <div style="font-weight:700;color:var(--text-primary);">Quản lý tài khoản đăng nhập nội bộ</div>
+                    <div style="font-size:12px;color:var(--text-muted);">Tài khoản được cấp quyền riêng biệt cho 4 chức vụ: Chủ quán, Quản lý, Thu ngân, Nhân viên</div>
+                </div>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="openAddUserModal()">
+                <i class="fas fa-key"></i> + Cấp tài khoản mới
+            </button>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+            <div class="card-title">
+                <i class="fas fa-id-badge"></i> Danh sách tài khoản người dùng (<span id="users-count">0</span> tài khoản)
+            </div>
+            <button class="btn btn-secondary btn-sm" onclick="loadUsers()">
+                <i class="fas fa-sync-alt"></i> Làm mới
+            </button>
+        </div>
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Tên đăng nhập</th>
+                        <th>Họ và tên</th>
+                        <th>Chức vụ / Quyền hạn</th>
+                        <th>Nhân viên liên kết</th>
+                        <th>Lần đăng nhập cuối</th>
+                        <th>Trạng thái</th>
+                        <th style="text-align: right;">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody id="users-tbody">
+                    <tr>
+                        <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 30px;">
+                            <i class="fas fa-spinner fa-spin fa-2x"></i>
+                            <p style="margin-top: 10px;">Đang tải danh sách tài khoản...</p>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================================== -->
+<!-- TAB 3: BẢNG PHÂN QUYỀN 4 CHỨC VỤ                               -->
+<!-- ============================================================== -->
+<div id="view-matrix-tab" style="display:none;">
+    <div class="card">
+        <div class="card-header">
+            <div class="card-title">
+                <i class="fas fa-sitemap"></i> Ma trận phân quyền chi tiết cho 4 chức vụ
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table matrix-table" style="width:100%;">
+                <thead>
+                    <tr style="background:var(--bg-surface);">
+                        <th style="width:260px;padding:14px 18px;">Tính năng / Chức năng hệ thống</th>
+                        <th style="text-align:center;padding:14px 12px;color:var(--primary-gold);">
+                            <i class="fas fa-crown"></i><br>Chủ quán (Owner)
+                        </th>
+                        <th style="text-align:center;padding:14px 12px;color:#5a9fd4;">
+                            <i class="fas fa-shield-halved"></i><br>Quản lý (Manager)
+                        </th>
+                        <th style="text-align:center;padding:14px 12px;color:#e8a040;">
+                            <i class="fas fa-calculator"></i><br>Thu ngân (Cashier)
+                        </th>
+                        <th style="text-align:center;padding:14px 12px;color:#4caf80;">
+                            <i class="fas fa-person-walking"></i><br>Nhân viên (Phục vụ / Pha chế)
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Báo cáo &amp; Dashboard Doanh thu</strong><br><small style="color:var(--text-muted);">Xem doanh thu, lợi nhuận, chi phí</small></td>
+                        <td class="perm-full"><i class="fas fa-check-circle"></i> Toàn quyền</td>
+                        <td class="perm-yes"><i class="fas fa-eye"></i> Xem tổng quan</td>
+                        <td class="perm-no"><i class="fas fa-times-circle"></i> Bị chặn</td>
+                        <td class="perm-no"><i class="fas fa-times-circle"></i> Bị chặn</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Bán hàng &amp; Gọi món (POS)</strong><br><small style="color:var(--text-muted);">Tạo đơn hàng, gọi món, in hóa đơn</small></td>
+                        <td class="perm-full"><i class="fas fa-check-circle"></i> Toàn quyền</td>
+                        <td class="perm-full"><i class="fas fa-check-circle"></i> Toàn quyền</td>
+                        <td class="perm-full"><i class="fas fa-check-circle"></i> Toàn quyền</td>
+                        <td class="perm-yes"><i class="fas fa-check"></i> Gọi món cho khách</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Quản lý Bàn &amp; Khu vực</strong><br><small style="color:var(--text-muted);">Tạo khu vực, thêm bàn, chuyển bàn</small></td>
+                        <td class="perm-full"><i class="fas fa-check-circle"></i> Toàn quyền</td>
+                        <td class="perm-full"><i class="fas fa-check-circle"></i> Toàn quyền</td>
+                        <td class="perm-yes"><i class="fas fa-check"></i> Xem &amp; chuyển bàn</td>
+                        <td class="perm-yes"><i class="fas fa-eye"></i> Xem trạng thái bàn</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Màn hình Pha chế (KDS)</strong><br><small style="color:var(--text-muted);">Hàng đợi chế biến, đánh dấu hoàn thành</small></td>
+                        <td class="perm-full"><i class="fas fa-check-circle"></i> Toàn quyền</td>
+                        <td class="perm-full"><i class="fas fa-check-circle"></i> Toàn quyền</td>
+                        <td class="perm-yes"><i class="fas fa-eye"></i> Theo dõi món xong</td>
+                        <td class="perm-full"><i class="fas fa-check-circle"></i> Pha chế &amp; Hoàn thành</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Thực đơn &amp; Món ăn</strong><br><small style="color:var(--text-muted);">Thêm/sửa món, đổi giá, danh mục</small></td>
+                        <td class="perm-full"><i class="fas fa-check-circle"></i> Toàn quyền</td>
+                        <td class="perm-full"><i class="fas fa-check-circle"></i> Toàn quyền</td>
+                        <td class="perm-no"><i class="fas fa-times-circle"></i> Không xem/sửa</td>
+                        <td class="perm-no"><i class="fas fa-times-circle"></i> Không xem/sửa</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Thẻ thành viên &amp; Voucher</strong><br><small style="color:var(--text-muted);">Tích điểm, đổi điểm, tạo voucher</small></td>
+                        <td class="perm-full"><i class="fas fa-check-circle"></i> Toàn quyền</td>
+                        <td class="perm-full"><i class="fas fa-check-circle"></i> Toàn quyền</td>
+                        <td class="perm-yes"><i class="fas fa-check"></i> Tích điểm &amp; áp mã</td>
+                        <td class="perm-no"><i class="fas fa-times-circle"></i> Bị chặn</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Kho nguyên liệu &amp; Định lượng</strong><br><small style="color:var(--text-muted);">Nhập xuất kho, giá vốn, công thức</small></td>
+                        <td class="perm-full"><i class="fas fa-check-circle"></i> Toàn quyền</td>
+                        <td class="perm-full"><i class="fas fa-check-circle"></i> Toàn quyền</td>
+                        <td class="perm-no"><i class="fas fa-times-circle"></i> Bị chặn</td>
+                        <td class="perm-no"><i class="fas fa-times-circle"></i> Bị chặn</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Quản lý Nhân sự &amp; Cấp tài khoản</strong><br><small style="color:var(--text-muted);">Hồ sơ nhân viên, cấp tài khoản đăng nhập</small></td>
+                        <td class="perm-full"><i class="fas fa-check-circle"></i> Toàn quyền</td>
+                        <td class="perm-yes"><i class="fas fa-check"></i> Cấp quyền cấp dưới</td>
+                        <td class="perm-no"><i class="fas fa-times-circle"></i> Bị chặn</td>
+                        <td class="perm-no"><i class="fas fa-times-circle"></i> Bị chặn</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Lịch phân ca &amp; Chấm công</strong><br><small style="color:var(--text-muted);">Xếp ca, chấm công vào/ra hàng ngày</small></td>
+                        <td class="perm-full"><i class="fas fa-check-circle"></i> Toàn quyền</td>
+                        <td class="perm-full"><i class="fas fa-check-circle"></i> Toàn quyền</td>
+                        <td class="perm-yes"><i class="fas fa-user-clock"></i> Tự chấm công bản thân</td>
+                        <td class="perm-yes"><i class="fas fa-user-clock"></i> Tự chấm công bản thân</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Bảng lương &amp; Chi trả</strong><br><small style="color:var(--text-muted);">Tính lương tự động, chi trả lương</small></td>
+                        <td class="perm-full"><i class="fas fa-check-circle"></i> Toàn quyền</td>
+                        <td class="perm-no"><i class="fas fa-lock"></i> Bảo mật chủ quán</td>
+                        <td class="perm-no"><i class="fas fa-times-circle"></i> Bị chặn</td>
+                        <td class="perm-no"><i class="fas fa-times-circle"></i> Bị chặn</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================================== -->
+<!-- MODALS                                                         -->
+<!-- ============================================================== -->
+
 <!-- Modal: Thêm nhân viên (Add Staff Modal) -->
 <div id="add-staff-modal" class="modal-backdrop">
-    <div class="modal-box">
+    <div class="modal-box" style="max-width:480px;">
         <div class="modal-header">
             <h3 style="color: var(--primary-gold);"><i class="fas fa-user-plus"></i> Thêm nhân viên mới</h3>
             <button class="modal-close-btn" onclick="closeModal('add-staff-modal')">&times;</button>
@@ -58,32 +300,57 @@
                 </div>
 
                 <div class="form-group">
-                    <label class="form-label">Vai trò / Chức vụ *</label>
-                    <select id="add-staff-role" class="form-select" required>
-                        <option value="waiter">Phục vụ bàn (Waiter)</option>
+                    <label class="form-label">Chức vụ / Vai trò *</label>
+                    <select id="add-staff-role" class="form-select" required onchange="syncAccountRoleSuggestion()">
+                        <option value="waiter">Nhân viên phục vụ (Waiter)</option>
+                        <option value="barista">Nhân viên pha chế (Barista)</option>
                         <option value="cashier">Thu ngân (Cashier)</option>
-                        <option value="admin">Quản lý / Giám sát (Admin)</option>
+                        <option value="manager">Quản lý (Manager)</option>
+                        <option value="owner" id="opt-owner-staff" style="display:none;">Chủ quán (Owner)</option>
                     </select>
                 </div>
 
-                <div class="form-group">
-                    <label class="form-label">Số điện thoại</label>
-                    <input type="tel" id="add-staff-phone" class="form-control" placeholder="Ví dụ: 0901234567">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                    <div class="form-group">
+                        <label class="form-label">Số điện thoại</label>
+                        <input type="tel" id="add-staff-phone" class="form-control" placeholder="Ví dụ: 0901234567">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Email</label>
+                        <input type="email" id="add-staff-email" class="form-control" placeholder="an@cafe.vn">
+                    </div>
                 </div>
 
-                <div class="form-group">
-                    <label class="form-label">Email</label>
-                    <input type="email" id="add-staff-email" class="form-control" placeholder="Ví dụ: an.nguyen@cafeantigravity.vn">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                    <div class="form-group">
+                        <label class="form-label">Mức lương cơ bản (VND)</label>
+                        <input type="number" id="add-staff-salary" class="form-control" placeholder="vd: 5000000" min="0" step="1">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Ngày vào làm</label>
+                        <input type="date" id="add-staff-hiredate" class="form-control">
+                    </div>
                 </div>
 
-                <div class="form-group">
-                    <label class="form-label">Mức lương cơ bản (VND)</label>
-                    <input type="number" id="add-staff-salary" class="form-control" placeholder="Nhập lương (VND), ví dụ: 5000000 hoặc 25000/giờ" min="0" step="1">
-                </div>
+                <!-- Option: Cấp luôn tài khoản đăng nhập -->
+                <div style="background:var(--bg-surface);padding:14px;border-radius:var(--radius-sm);border:1px dashed var(--primary-gold);margin-top:10px;">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600;color:var(--primary-gold);font-size:13px;margin:0 0 8px 0;">
+                        <input type="checkbox" id="add-staff-create-account" onchange="toggleAccountCreationFields(this.checked)" style="width:16px;height:16px;accent-color:var(--primary-gold);">
+                        Cấp tài khoản đăng nhập cho nhân viên này
+                    </label>
 
-                <div class="form-group">
-                    <label class="form-label">Ngày vào làm</label>
-                    <input type="date" id="add-staff-hiredate" class="form-control">
+                    <div id="account-creation-fields" style="display:none;margin-top:10px;">
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                            <div class="form-group" style="margin-bottom:0;">
+                                <label class="form-label" style="font-size:11px;">Tên đăng nhập *</label>
+                                <input type="text" id="add-staff-username" class="form-control form-control-sm" placeholder="vd: an_nv">
+                            </div>
+                            <div class="form-group" style="margin-bottom:0;">
+                                <label class="form-label" style="font-size:11px;">Mật khẩu *</label>
+                                <input type="password" id="add-staff-password" class="form-control form-control-sm" placeholder="Tối thiểu 6 ký tự">
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer">
@@ -96,7 +363,7 @@
 
 <!-- Modal: Sửa nhân viên (Edit Staff Modal) -->
 <div id="edit-staff-modal" class="modal-backdrop">
-    <div class="modal-box">
+    <div class="modal-box" style="max-width:480px;">
         <div class="modal-header">
             <h3 style="color: var(--primary-gold);"><i class="fas fa-user-pen"></i> Cập nhật hồ sơ nhân viên</h3>
             <button class="modal-close-btn" onclick="closeModal('edit-staff-modal')">&times;</button>
@@ -110,38 +377,42 @@
                 </div>
 
                 <div class="form-group">
-                    <label class="form-label">Vai trò / Chức vụ *</label>
+                    <label class="form-label">Chức vụ / Vai trò *</label>
                     <select id="edit-staff-role" class="form-select" required>
-                        <option value="waiter">Phục vụ bàn (Waiter)</option>
+                        <option value="waiter">Nhân viên phục vụ (Waiter)</option>
+                        <option value="barista">Nhân viên pha chế (Barista)</option>
                         <option value="cashier">Thu ngân (Cashier)</option>
-                        <option value="admin">Quản lý / Giám sát (Admin)</option>
+                        <option value="manager">Quản lý (Manager)</option>
+                        <option value="owner" id="edit-opt-owner-staff">Chủ quán (Owner)</option>
                     </select>
                 </div>
 
-                <div class="form-group">
-                    <label class="form-label">Số điện thoại</label>
-                    <input type="tel" id="edit-staff-phone" class="form-control">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                    <div class="form-group">
+                        <label class="form-label">Số điện thoại</label>
+                        <input type="tel" id="edit-staff-phone" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Email</label>
+                        <input type="email" id="edit-staff-email" class="form-control">
+                    </div>
                 </div>
 
-                <div class="form-group">
-                    <label class="form-label">Email</label>
-                    <input type="email" id="edit-staff-email" class="form-control">
-                </div>
-
-                <div class="form-group">
-                    <label class="form-label">Mức lương cơ bản (VND)</label>
-                    <input type="number" id="edit-staff-salary" class="form-control" placeholder="Nhập lương (VND)" min="0" step="1">
-                </div>
-
-                <div class="form-group">
-                    <label class="form-label">Ngày vào làm</label>
-                    <input type="date" id="edit-staff-hiredate" class="form-control">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                    <div class="form-group">
+                        <label class="form-label">Mức lương cơ bản (VND)</label>
+                        <input type="number" id="edit-staff-salary" class="form-control" placeholder="Nhập lương (VND)" min="0" step="1">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Ngày vào làm</label>
+                        <input type="date" id="edit-staff-hiredate" class="form-control">
+                    </div>
                 </div>
 
                 <div class="form-group">
                     <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-primary); font-size: 13px;">
                         <input type="checkbox" id="edit-staff-active" style="width: 16px; height: 16px; accent-color: var(--primary-gold);">
-                        Đang làm việc (Kích hoạt tài khoản)
+                        Đang làm việc (Kích hoạt hồ sơ)
                     </label>
                 </div>
             </div>
@@ -152,41 +423,330 @@
         </form>
     </div>
 </div>
+
+<!-- Modal: Cấp tài khoản mới (Add User Modal) -->
+<div id="add-user-modal" class="modal-backdrop">
+    <div class="modal-box" style="max-width:440px;">
+        <div class="modal-header">
+            <h3 style="color: var(--primary-gold);"><i class="fas fa-key"></i> Cấp tài khoản đăng nhập</h3>
+            <button class="modal-close-btn" onclick="closeModal('add-user-modal')">&times;</button>
+        </div>
+        <form id="add-user-form" onsubmit="submitAddUser(event)">
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Gắn với nhân viên</label>
+                    <select id="add-user-staff-select" class="form-select" onchange="onSelectStaffForAccount(this)">
+                        <option value="">-- Tài khoản độc lập (Không gắn nhân viên) --</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Họ và tên hiển thị *</label>
+                    <input type="text" id="add-user-fullname" class="form-control" placeholder="Nguyễn Văn A" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Tên đăng nhập *</label>
+                    <input type="text" id="add-user-username" class="form-control" placeholder="vd: nhanvien01" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Mật khẩu * (Tối thiểu 6 ký tự)</label>
+                    <input type="password" id="add-user-password" class="form-control" placeholder="Nhập mật khẩu..." required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Chức vụ / Quyền hạn *</label>
+                    <select id="add-user-role" class="form-select" required>
+                        <option value="waiter">Nhân viên phục vụ (Waiter)</option>
+                        <option value="barista">Nhân viên pha chế (Barista)</option>
+                        <option value="cashier">Thu ngân (Cashier)</option>
+                        <option value="manager" id="opt-role-manager">Quản lý (Manager)</option>
+                        <option value="owner" id="opt-role-owner">Chủ quán (Owner)</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="closeModal('add-user-modal')">Hủy</button>
+                <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-save"></i> Cấp tài khoản</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal: Đổi mật khẩu tài khoản (Reset Password Modal) -->
+<div id="reset-password-modal" class="modal-backdrop">
+    <div class="modal-box" style="max-width:380px;">
+        <div class="modal-header">
+            <h3 style="color: var(--primary-gold);"><i class="fas fa-lock"></i> Đổi mật khẩu tài khoản</h3>
+            <button class="modal-close-btn" onclick="closeModal('reset-password-modal')">&times;</button>
+        </div>
+        <form id="reset-pw-form" onsubmit="submitResetPassword(event)">
+            <div class="modal-body">
+                <input type="hidden" id="reset-pw-user-id">
+                <div class="form-group">
+                    <label class="form-label">Tài khoản</label>
+                    <input type="text" id="reset-pw-username" class="form-control" readonly style="background:var(--bg-surface);color:var(--primary-gold);font-weight:700;">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Mật khẩu mới * (Tối thiểu 6 ký tự)</label>
+                    <input type="password" id="reset-pw-new" class="form-control" placeholder="Nhập mật khẩu mới..." required>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="closeModal('reset-password-modal')">Hủy</button>
+                <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-check"></i> Xác nhận đổi</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal: Sửa tài khoản (Edit User Modal) -->
+<div id="edit-user-modal" class="modal-backdrop">
+    <div class="modal-box" style="max-width:420px;">
+        <div class="modal-header">
+            <h3 style="color: var(--primary-gold);"><i class="fas fa-user-gear"></i> Chỉnh sửa tài khoản</h3>
+            <button class="modal-close-btn" onclick="closeModal('edit-user-modal')">&times;</button>
+        </div>
+        <form id="edit-user-form" onsubmit="submitEditUser(event)">
+            <div class="modal-body">
+                <input type="hidden" id="edit-user-id">
+                <div class="form-group">
+                    <label class="form-label">Tên đăng nhập</label>
+                    <input type="text" id="edit-user-username" class="form-control" readonly style="background:var(--bg-surface);color:var(--text-muted);">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Họ và tên *</label>
+                    <input type="text" id="edit-user-fullname" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Chức vụ / Vai trò *</label>
+                    <select id="edit-user-role" class="form-select" required>
+                        <option value="waiter">Nhân viên phục vụ (Waiter)</option>
+                        <option value="barista">Nhân viên pha chế (Barista)</option>
+                        <option value="cashier">Thu ngân (Cashier)</option>
+                        <option value="manager" id="edit-opt-role-manager">Quản lý (Manager)</option>
+                        <option value="owner" id="edit-opt-role-owner">Chủ quán (Owner)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Nhân viên liên kết</label>
+                    <select id="edit-user-staff-select" class="form-select">
+                        <option value="">-- Không gắn nhân viên --</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:var(--text-primary);font-size:13px;">
+                        <input type="checkbox" id="edit-user-active" style="width:16px;height:16px;accent-color:var(--primary-gold);">
+                        Đang hoạt động (Cho phép đăng nhập)
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="closeModal('edit-user-modal')">Hủy</button>
+                <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-save"></i> Lưu cập nhật</button>
+            </div>
+        </form>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
+<style>
+.tab-btn {
+    background: transparent;
+    border: none;
+    padding: 8px 18px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s ease;
+}
+.tab-btn:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+}
+.tab-btn.active {
+    background: var(--primary-gold);
+    color: #121212;
+}
+
+.matrix-table td {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border-subtle);
+    font-size: 13px;
+    vertical-align: middle;
+}
+.matrix-table th {
+    border-bottom: 2px solid var(--border-subtle);
+    font-size: 13px;
+}
+.perm-full {
+    text-align: center;
+    font-weight: 700;
+    color: var(--primary-gold);
+    background: rgba(200, 169, 126, 0.05);
+}
+.perm-yes {
+    text-align: center;
+    font-weight: 600;
+    color: var(--success);
+}
+.perm-no {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 12px;
+}
+</style>
+
 <script>
 let fullStaffList = [];
+let fullUserList = [];
+let currentUserRole = '';
 
-// Initialize
+// ── Role label mapping ──
+const roleTitles = {
+    owner: { name: 'Chủ quán', icon: 'fa-crown', color: 'badge-gold' },
+    manager: { name: 'Quản lý', icon: 'fa-shield-halved', color: 'badge-info' },
+    cashier: { name: 'Thu ngân', icon: 'fa-calculator', color: 'badge-warning' },
+    barista: { name: 'Pha chế', icon: 'fa-blender', color: 'badge-purple' },
+    waiter: { name: 'Phục vụ', icon: 'fa-person-walking', color: 'badge-success' }
+};
+
+function getRoleBadge(role) {
+    const meta = roleTitles[role] || { name: role, icon: 'fa-user', color: 'badge-secondary' };
+    return `<span class="badge ${meta.color}"><i class="fas ${meta.icon}"></i> ${meta.name}</span>`;
+}
+
+// ── Tab switcher ──
+function switchStaffTab(tab) {
+    document.getElementById('tab-btn-staff').classList.toggle('active', tab === 'staff');
+    document.getElementById('tab-btn-users').classList.toggle('active', tab === 'users');
+    document.getElementById('tab-btn-matrix').classList.toggle('active', tab === 'matrix');
+
+    document.getElementById('view-staff-tab').style.display = (tab === 'staff') ? 'block' : 'none';
+    document.getElementById('view-users-tab').style.display = (tab === 'users') ? 'block' : 'none';
+    document.getElementById('view-matrix-tab').style.display = (tab === 'matrix') ? 'block' : 'none';
+
+    if (tab === 'users') {
+        loadUsers();
+    }
+}
+
+// ── Initialize ──
+async function init() {
+    try {
+        const me = await apiCall('/api/auth/me');
+        if (me.logged_in) {
+            currentUserRole = me.user.role;
+            // Hide Owner role option for non-owner
+            if (currentUserRole !== 'owner') {
+                const optOwnerStaff = document.getElementById('opt-owner-staff');
+                const optRoleOwner = document.getElementById('opt-role-owner');
+                const optRoleManager = document.getElementById('opt-role-manager');
+                const editOptOwner = document.getElementById('edit-opt-role-owner');
+                const editOptManager = document.getElementById('edit-opt-role-manager');
+                if (optOwnerStaff) optOwnerStaff.style.display = 'none';
+                if (optRoleOwner) optRoleOwner.style.display = 'none';
+                if (optRoleManager) optRoleManager.style.display = 'none';
+                if (editOptOwner) editOptOwner.style.display = 'none';
+                if (editOptManager) editOptManager.style.display = 'none';
+            }
+        }
+        await Promise.all([loadStaff(), loadUsers()]);
+    } catch(e) {
+        console.error('Init error:', e);
+    }
+}
+
+// ── STAFF FUNCTIONS ──
 async function loadStaff() {
     try {
-        fullStaffList = await apiCall('/api/staff');
+        fullStaffList = await apiCall('/api/staff') || [];
         renderStaffTable(fullStaffList);
+        updateStaffSummaryStats();
     } catch (e) {
         console.error('Failed to load staff:', e);
     }
 }
 
-// Render Staff Table
+function updateStaffSummaryStats() {
+    const total = fullStaffList.length;
+    const active = fullStaffList.filter(s => s.active).length;
+    const linked = fullStaffList.filter(s => s.user_account).length;
+    const totalSalary = fullStaffList.filter(s => s.active).reduce((sum, s) => sum + (Number(s.salary) || 0), 0);
+
+    document.getElementById('stat-total-staff').textContent = total;
+    document.getElementById('stat-active-staff').textContent = active;
+    document.getElementById('stat-linked-accounts').textContent = linked;
+    document.getElementById('stat-total-salary').textContent = formatVND(totalSalary);
+}
+
+function filterStaffTable() {
+    const query = document.getElementById('staff-search-input').value.trim().toLowerCase();
+    const role = document.getElementById('staff-role-filter').value;
+    const status = document.getElementById('staff-status-filter').value;
+
+    let filtered = fullStaffList;
+
+    if (query) {
+        filtered = filtered.filter(s => 
+            (s.name && s.name.toLowerCase().includes(query)) ||
+            (s.phone && s.phone.includes(query)) ||
+            (s.email && s.email.toLowerCase().includes(query))
+        );
+    }
+
+    if (role !== 'all') {
+        filtered = filtered.filter(s => s.role === role);
+    }
+
+    if (status === 'active') {
+        filtered = filtered.filter(s => s.active);
+    } else if (status === 'inactive') {
+        filtered = filtered.filter(s => !s.active);
+    }
+
+    renderStaffTable(filtered);
+}
+
 function renderStaffTable(staffList) {
     const tbody = document.getElementById('staff-tbody');
     document.getElementById('staff-count').textContent = staffList.length;
 
     if (staffList.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 30px;">Chưa có dữ liệu nhân viên.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; color: var(--text-muted); padding: 30px;">Không tìm thấy nhân viên nào phù hợp.</td></tr>`;
         return;
     }
 
     tbody.innerHTML = staffList.map(s => {
-        let roleBadge = '<span class="badge badge-info"><i class="fas fa-person"></i> Phục vụ</span>';
-        if (s.role === 'admin') roleBadge = '<span class="badge badge-gold"><i class="fas fa-shield"></i> Quản lý</span>';
-        if (s.role === 'cashier') roleBadge = '<span class="badge badge-warning"><i class="fas fa-calculator"></i> Thu ngân</span>';
+        let accountCell = '';
+        if (s.user_account) {
+            accountCell = `
+                <div style="display:flex;align-items:center;gap:6px;">
+                    <span class="badge" style="background:rgba(200,169,126,0.15);color:var(--primary-gold);border:1px solid rgba(200,169,126,0.3);font-size:11px;">
+                        <i class="fas fa-key"></i> ${s.user_account.username}
+                    </span>
+                </div>
+            `;
+        } else {
+            accountCell = `
+                <button class="btn btn-secondary btn-sm" style="font-size:11px;padding:3px 8px;" onclick="openCreateAccountForStaff(${s.id}, '${s.name}', '${s.role}')">
+                    <i class="fas fa-plus"></i> Cấp tài khoản
+                </button>
+            `;
+        }
 
         return `
             <tr style="${!s.active ? 'opacity: 0.55;' : ''}">
                 <td><strong>${s.name}</strong></td>
-                <td>${roleBadge}</td>
+                <td>${getRoleBadge(s.role)}</td>
+                <td>${accountCell}</td>
                 <td>${s.phone || '—'}</td>
                 <td>${s.email || '—'}</td>
                 <td><strong style="color: var(--primary-gold);">${formatVND(s.salary)}</strong></td>
@@ -196,7 +756,7 @@ function renderStaffTable(staffList) {
                         ? '<span class="badge badge-success"><i class="fas fa-circle"></i> Đang làm việc</span>' 
                         : '<span class="badge badge-danger"><i class="fas fa-ban"></i> Đã nghỉ việc</span>'}
                 </td>
-                <td style="text-align: right;">
+                <td style="text-align: right; white-space:nowrap;">
                     <button class="btn btn-secondary btn-sm" onclick="openEditStaffModal(${s.id})" title="Chỉnh sửa">
                         <i class="fas fa-pen"></i>
                     </button>
@@ -215,16 +775,36 @@ function renderStaffTable(staffList) {
     }).join('');
 }
 
-// Open Add Staff Modal
 function openAddStaffModal() {
     document.getElementById('add-staff-form').reset();
     document.getElementById('add-staff-hiredate').value = new Date().toISOString().split('T')[0];
+    document.getElementById('account-creation-fields').style.display = 'none';
+    document.getElementById('add-staff-create-account').checked = false;
     openModal('add-staff-modal');
 }
 
-// Submit Add Staff
+function toggleAccountCreationFields(checked) {
+    document.getElementById('account-creation-fields').style.display = checked ? 'block' : 'none';
+    if (checked) {
+        syncAccountRoleSuggestion();
+    }
+}
+
+function syncAccountRoleSuggestion() {
+    const staffName = document.getElementById('add-staff-name').value.trim();
+    const usernameInput = document.getElementById('add-staff-username');
+    if (staffName && !usernameInput.value) {
+        // Generate slug username
+        const clean = staffName.toLowerCase()
+            .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+            .replace(/đ/g, "d").replace(/[^a-z0-9]/g, "");
+        usernameInput.value = clean || 'nhanvien';
+    }
+}
+
 async function submitAddStaff(e) {
     e.preventDefault();
+    const createAccount = document.getElementById('add-staff-create-account').checked;
     const payload = {
         name: document.getElementById('add-staff-name').value.trim(),
         role: document.getElementById('add-staff-role').value,
@@ -234,12 +814,29 @@ async function submitAddStaff(e) {
         hire_date: document.getElementById('add-staff-hiredate').value
     };
 
+    if (createAccount) {
+        const username = document.getElementById('add-staff-username').value.trim();
+        const password = document.getElementById('add-staff-password').value;
+        if (!username || !password) {
+            showToast('Vui lòng nhập Tên đăng nhập và Mật khẩu!', 'warning');
+            return;
+        }
+        if (password.length < 6) {
+            showToast('Mật khẩu tối thiểu 6 ký tự!', 'warning');
+            return;
+        }
+        payload.username = username;
+        payload.password = password;
+        payload.account_role = payload.role;
+    }
+
     try {
         const res = await apiCall('/api/staff', 'POST', payload);
         if (res.success) {
             showToast('Thêm nhân viên mới thành công!');
             closeModal('add-staff-modal');
             loadStaff();
+            loadUsers();
         } else {
             showToast(res.message || 'Lỗi thêm nhân viên', 'error');
         }
@@ -248,7 +845,6 @@ async function submitAddStaff(e) {
     }
 }
 
-// Open Edit Staff Modal
 function openEditStaffModal(id) {
     const staff = fullStaffList.find(s => s.id === id);
     if (!staff) return;
@@ -265,7 +861,6 @@ function openEditStaffModal(id) {
     openModal('edit-staff-modal');
 }
 
-// Submit Edit Staff
 async function submitEditStaff(e) {
     e.preventDefault();
     const id = document.getElementById('edit-staff-id').value;
@@ -293,7 +888,6 @@ async function submitEditStaff(e) {
     }
 }
 
-// Deactivate Staff
 function deactivateStaff(id, name) {
     showConfirm('Vô hiệu hóa nhân sự', `Bạn có chắc chắn muốn ngưng hoạt động của nhân viên "${name}"?`, async () => {
         try {
@@ -310,7 +904,6 @@ function deactivateStaff(id, name) {
     });
 }
 
-// Reactivate Staff
 async function reactivateStaff(id) {
     try {
         const res = await apiCall(`/api/staff/${id}`, 'PUT', { active: true });
@@ -325,6 +918,245 @@ async function reactivateStaff(id) {
     }
 }
 
-document.addEventListener('DOMContentLoaded', loadStaff);
+// ── USERS & ACCOUNT MANAGEMENT ──
+async function loadUsers() {
+    try {
+        fullUserList = await apiCall('/api/users') || [];
+        renderUsersTable(fullUserList);
+        document.getElementById('user-count-badge').textContent = fullUserList.length;
+        document.getElementById('users-count').textContent = fullUserList.length;
+    } catch(e) {
+        console.error('Failed to load users:', e);
+    }
+}
+
+function renderUsersTable(userList) {
+    const tbody = document.getElementById('users-tbody');
+    if (!tbody) return;
+
+    if (userList.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 30px;">Chưa có tài khoản đăng nhập nào.</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = userList.map(u => {
+        const linkedStaffName = u.staff_name ? `<span style="color:var(--text-primary);"><i class="fas fa-user-check"></i> ${u.staff_name}</span>` : '<span style="color:var(--text-muted);">— Độc lập —</span>';
+        const lastLoginStr = u.last_login ? u.last_login : '<span style="color:var(--text-muted);">Chưa đăng nhập</span>';
+
+        return `
+            <tr style="${!u.active ? 'opacity:0.55;' : ''}">
+                <td>
+                    <strong style="color:var(--primary-gold);font-family:monospace;font-size:14px;">${u.username}</strong>
+                </td>
+                <td><strong>${u.full_name}</strong></td>
+                <td>${getRoleBadge(u.role)}</td>
+                <td>${linkedStaffName}</td>
+                <td style="font-size:12px;">${lastLoginStr}</td>
+                <td>
+                    ${u.active 
+                        ? '<span class="badge badge-success"><i class="fas fa-circle"></i> Hoạt động</span>' 
+                        : '<span class="badge badge-danger"><i class="fas fa-lock"></i> Đã khóa</span>'}
+                </td>
+                <td style="text-align: right; white-space:nowrap;">
+                    <button class="btn btn-secondary btn-sm" onclick="openResetPasswordModal(${u.id}, '${u.username}')" title="Đổi mật khẩu">
+                        <i class="fas fa-key"></i>
+                    </button>
+                    <button class="btn btn-secondary btn-sm" onclick="openEditUserModal(${u.id})" title="Chỉnh sửa">
+                        <i class="fas fa-pen"></i>
+                    </button>
+                    <button class="btn btn-secondary btn-sm" onclick="toggleUserActive(${u.id}, ${!u.active})" title="${u.active ? 'Khóa tài khoản' : 'Mở khóa'}">
+                        <i class="fas ${u.active ? 'fa-lock' : 'fa-unlock'}"></i>
+                    </button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteUserAccount(${u.id}, '${u.username}')" title="Xóa tài khoản">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function openAddUserModal() {
+    document.getElementById('add-user-form').reset();
+    populateStaffSelectForUser('add-user-staff-select');
+    openModal('add-user-modal');
+}
+
+function openCreateAccountForStaff(staffId, staffName, staffRole) {
+    openAddUserModal();
+    const select = document.getElementById('add-user-staff-select');
+    select.value = staffId;
+    document.getElementById('add-user-fullname').value = staffName;
+    document.getElementById('add-user-role').value = staffRole || 'waiter';
+
+    // Suggest username
+    const clean = staffName.toLowerCase()
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        .replace(/đ/g, "d").replace(/[^a-z0-9]/g, "");
+    document.getElementById('add-user-username').value = clean;
+}
+
+function populateStaffSelectForUser(elementId, selectedId = null) {
+    const select = document.getElementById(elementId);
+    if (!select) return;
+
+    select.innerHTML = '<option value="">-- Tài khoản độc lập (Không gắn nhân viên) --</option>';
+    fullStaffList.forEach(s => {
+        select.innerHTML += `<option value="${s.id}">${s.name} (${roleTitles[s.role] ? roleTitles[s.role].name : s.role})</option>`;
+    });
+
+    if (selectedId) {
+        select.value = selectedId;
+    }
+}
+
+function onSelectStaffForAccount(selectEl) {
+    const staffId = selectEl.value;
+    if (staffId) {
+        const staff = fullStaffList.find(s => String(s.id) === String(staffId));
+        if (staff) {
+            document.getElementById('add-user-fullname').value = staff.name;
+            if (staff.role) {
+                document.getElementById('add-user-role').value = staff.role;
+            }
+            const clean = staff.name.toLowerCase()
+                .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+                .replace(/đ/g, "d").replace(/[^a-z0-9]/g, "");
+            document.getElementById('add-user-username').value = clean;
+        }
+    }
+}
+
+async function submitAddUser(e) {
+    e.preventDefault();
+    const payload = {
+        staff_id: document.getElementById('add-user-staff-select').value || null,
+        full_name: document.getElementById('add-user-fullname').value.trim(),
+        username: document.getElementById('add-user-username').value.trim(),
+        password: document.getElementById('add-user-password').value,
+        role: document.getElementById('add-user-role').value
+    };
+
+    if (payload.password.length < 6) {
+        showToast('Mật khẩu tối thiểu 6 ký tự!', 'warning');
+        return;
+    }
+
+    try {
+        const res = await apiCall('/api/users', 'POST', payload);
+        if (res.success) {
+            showToast(res.message || 'Cấp tài khoản thành công!');
+            closeModal('add-user-modal');
+            loadUsers();
+            loadStaff();
+        } else {
+            showToast(res.message || 'Lỗi cấp tài khoản', 'error');
+        }
+    } catch(e) {
+        showToast('Lỗi máy chủ khi cấp tài khoản', 'error');
+    }
+}
+
+function openResetPasswordModal(id, username) {
+    document.getElementById('reset-pw-user-id').value = id;
+    document.getElementById('reset-pw-username').value = username;
+    document.getElementById('reset-pw-new').value = '';
+    openModal('reset-password-modal');
+}
+
+async function submitResetPassword(e) {
+    e.preventDefault();
+    const id = document.getElementById('reset-pw-user-id').value;
+    const newPw = document.getElementById('reset-pw-new').value;
+
+    if (newPw.length < 6) {
+        showToast('Mật khẩu mới tối thiểu 6 ký tự!', 'warning');
+        return;
+    }
+
+    try {
+        const res = await apiCall(`/api/users/${id}`, 'PUT', { password: newPw });
+        if (res.success) {
+            showToast('Đổi mật khẩu tài khoản thành công!');
+            closeModal('reset-password-modal');
+        } else {
+            showToast(res.message || 'Lỗi đổi mật khẩu', 'error');
+        }
+    } catch(e) {
+        showToast('Lỗi khi đổi mật khẩu', 'error');
+    }
+}
+
+function openEditUserModal(id) {
+    const user = fullUserList.find(u => u.id === id);
+    if (!user) return;
+
+    document.getElementById('edit-user-id').value = user.id;
+    document.getElementById('edit-user-username').value = user.username;
+    document.getElementById('edit-user-fullname').value = user.full_name;
+    document.getElementById('edit-user-role').value = user.role;
+    document.getElementById('edit-user-active').checked = user.active;
+
+    populateStaffSelectForUser('edit-user-staff-select', user.staff_id);
+    openModal('edit-user-modal');
+}
+
+async function submitEditUser(e) {
+    e.preventDefault();
+    const id = document.getElementById('edit-user-id').value;
+    const payload = {
+        full_name: document.getElementById('edit-user-fullname').value.trim(),
+        role: document.getElementById('edit-user-role').value,
+        staff_id: document.getElementById('edit-user-staff-select').value || null,
+        active: document.getElementById('edit-user-active').checked
+    };
+
+    try {
+        const res = await apiCall(`/api/users/${id}`, 'PUT', payload);
+        if (res.success) {
+            showToast('Cập nhật tài khoản thành công!');
+            closeModal('edit-user-modal');
+            loadUsers();
+            loadStaff();
+        } else {
+            showToast(res.message || 'Lỗi cập nhật tài khoản', 'error');
+        }
+    } catch(e) {
+        showToast('Lỗi khi cập nhật tài khoản', 'error');
+    }
+}
+
+async function toggleUserActive(id, newActive) {
+    try {
+        const res = await apiCall(`/api/users/${id}`, 'PUT', { active: newActive });
+        if (res.success) {
+            showToast(newActive ? 'Đã mở khóa tài khoản!' : 'Đã khóa tài khoản!');
+            loadUsers();
+        } else {
+            showToast(res.message || 'Lỗi cập nhật trạng thái', 'error');
+        }
+    } catch(e) {
+        showToast('Lỗi khi cập nhật trạng thái', 'error');
+    }
+}
+
+function deleteUserAccount(id, username) {
+    showConfirm('Xác nhận xóa tài khoản', `Bạn có chắc chắn muốn xóa tài khoản "${username}" vĩnh viễn?`, async () => {
+        try {
+            const res = await apiCall(`/api/users/${id}`, 'DELETE');
+            if (res.success) {
+                showToast(res.message || 'Đã xóa tài khoản!');
+                loadUsers();
+                loadStaff();
+            } else {
+                showToast(res.message || 'Lỗi khi xóa tài khoản', 'error');
+            }
+        } catch(e) {
+            showToast('Lỗi khi xóa tài khoản', 'error');
+        }
+    });
+}
+
+document.addEventListener('DOMContentLoaded', init);
 </script>
 {% endblock %}
