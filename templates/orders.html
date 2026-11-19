@@ -4,9 +4,29 @@
 {% block page_subtitle %}Hệ thống nhận order và thanh toán trực tiếp tại quầy{% endblock %}
 
 {% block topbar_action %}
-<button class="btn btn-secondary btn-sm" onclick="toggleActiveOrdersModal()">
-    <i class="fas fa-list-check"></i> Đơn đang chờ (<span id="active-orders-count">0</span>)
-</button>
+<div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+    <!-- Shift Status Pill (Thu ngân mở ca / kết ca) -->
+    <div id="shift-active-bar" style="display: none; align-items: center; gap: 8px;">
+        <span class="badge" style="background: rgba(46, 204, 113, 0.15); color: #2ecc71; border: 1px solid rgba(46, 204, 113, 0.3); padding: 6px 12px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px;">
+            <i class="fas fa-cash-register"></i>
+            <span>Ca: <strong id="shift-badge-cashier" style="color: #fff;">-</strong></span>
+            <span style="opacity: 0.5;">|</span>
+            <span>Két: <strong id="shift-badge-cash" style="color: var(--primary-gold);">0 VND</strong></span>
+        </span>
+        <button class="btn btn-warning btn-sm" onclick="openCloseShiftModal()" style="font-size: 12px; padding: 5px 12px;">
+            <i class="fas fa-lock"></i> Kết ca / Chốt két
+        </button>
+    </div>
+
+    <!-- Nút mở ca khi chưa có ca -->
+    <button class="btn btn-primary btn-sm" id="btn-manual-open-shift" style="display: none;" onclick="openStartShiftModal()">
+        <i class="fas fa-door-open"></i> Mở ca làm việc
+    </button>
+
+    <button class="btn btn-secondary btn-sm" onclick="toggleActiveOrdersModal()">
+        <i class="fas fa-list-check"></i> Đơn đang chờ (<span id="active-orders-count">0</span>)
+    </button>
+</div>
 {% endblock %}
 
 {% block content %}
@@ -156,6 +176,142 @@
         </div>
     </div>
 </div>
+
+<!-- Modal: Mở ca làm việc (Thu ngân đầu ca) -->
+<div id="open-shift-modal" class="modal-backdrop">
+    <div class="modal-box" style="max-width: 480px;">
+        <div class="modal-header">
+            <h3 style="color: var(--primary-gold);"><i class="fas fa-door-open"></i> Mở ca làm việc & Tiền két đầu ca</h3>
+            <button class="modal-close-btn" onclick="closeModal('open-shift-modal')">&times;</button>
+        </div>
+        <form id="open-shift-form" onsubmit="submitOpenShift(event)">
+            <div class="modal-body">
+                <div style="background: rgba(200, 169, 126, 0.1); border: 1px solid rgba(200, 169, 126, 0.25); border-radius: var(--radius-md); padding: 12px 16px; margin-bottom: 18px; font-size: 13px;">
+                    <i class="fas fa-circle-info" style="color: var(--primary-gold);"></i>
+                    <span>Thu ngân cần nhập số tiền mặt có sẵn trong ngăn kéo (tiền thối ban đầu) để bắt đầu ca bán hàng.</span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Thu ngân phụ trách ca</label>
+                    <input type="text" id="open-shift-cashier-name" class="form-control" readonly style="opacity: 0.85; background: var(--bg-hover);">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Thời gian mở ca</label>
+                    <input type="text" id="open-shift-time" class="form-control" readonly style="opacity: 0.85; background: var(--bg-hover);">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Tiền mặt trong két ban đầu (VNĐ) *</label>
+                    <input type="number" id="open-shift-cash" class="form-control" placeholder="Ví dụ: 1000000" min="0" step="1000" required autofocus style="font-size: 16px; font-weight: 700; color: var(--primary-gold);">
+                    <div style="display: flex; gap: 6px; margin-top: 8px;">
+                        <button type="button" class="btn btn-secondary btn-sm" onclick="setQuickOpeningCash(500000)">500k</button>
+                        <button type="button" class="btn btn-secondary btn-sm" onclick="setQuickOpeningCash(1000000)">1 Triệu</button>
+                        <button type="button" class="btn btn-secondary btn-sm" onclick="setQuickOpeningCash(2000000)">2 Triệu</button>
+                        <button type="button" class="btn btn-secondary btn-sm" onclick="setQuickOpeningCash(3000000)">3 Triệu</button>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Ghi chú đầu ca</label>
+                    <input type="text" id="open-shift-notes" class="form-control" placeholder="Ghi chú thêm (nếu có)...">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="closeModal('open-shift-modal')">Bỏ qua</button>
+                <button type="submit" class="btn btn-primary btn-sm">
+                    <i class="fas fa-check-circle"></i> Xác nhận mở ca & Bắt đầu
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal: Kết ca làm việc & Kiểm đếm két (Chốt doanh thu) -->
+<div id="close-shift-modal" class="modal-backdrop">
+    <div class="modal-box" style="max-width: 540px;">
+        <div class="modal-header">
+            <h3 style="color: #f1c40f;"><i class="fas fa-lock"></i> Kết ca làm việc & Chốt doanh thu</h3>
+            <button class="modal-close-btn" onclick="closeModal('close-shift-modal')">&times;</button>
+        </div>
+        <form id="close-shift-form" onsubmit="submitCloseShift(event)">
+            <div class="modal-body">
+                <!-- Shift Summary Grid -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px;">
+                    <div style="background: var(--bg-hover); padding: 12px; border-radius: var(--radius-md); border: 1px solid var(--border-subtle);">
+                        <span style="font-size: 11px; color: var(--text-muted); display: block;">Tiền két đầu ca</span>
+                        <strong id="close-shift-opening-cash" style="font-size: 15px; color: var(--primary-gold);">0 VND</strong>
+                    </div>
+                    <div style="background: var(--bg-hover); padding: 12px; border-radius: var(--radius-md); border: 1px solid var(--border-subtle);">
+                        <span style="font-size: 11px; color: var(--text-muted); display: block;">Số đơn hoàn thành</span>
+                        <strong id="close-shift-orders-count" style="font-size: 15px; color: #fff;">0 đơn</strong>
+                    </div>
+                    <div style="background: var(--bg-hover); padding: 12px; border-radius: var(--radius-md); border: 1px solid var(--border-subtle);">
+                        <span style="font-size: 11px; color: var(--text-muted); display: block;">Doanh thu tiền mặt</span>
+                        <strong id="close-shift-cash-sales" style="font-size: 15px; color: #2ecc71;">0 VND</strong>
+                    </div>
+                    <div style="background: var(--bg-hover); padding: 12px; border-radius: var(--radius-md); border: 1px solid var(--border-subtle);">
+                        <span style="font-size: 11px; color: var(--text-muted); display: block;">Doanh thu thẻ / CK</span>
+                        <strong id="close-shift-card-sales" style="font-size: 15px; color: #3498db;">0 VND</strong>
+                    </div>
+                </div>
+
+                <!-- Expected Cash Banner -->
+                <div style="background: rgba(200, 169, 126, 0.12); border: 1px solid rgba(200, 169, 126, 0.35); border-radius: var(--radius-md); padding: 14px; margin-bottom: 18px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-size: 13px; color: var(--text-secondary);">Tiền mặt lý thuyết trong két:</span>
+                        <strong id="close-shift-expected-cash" style="font-size: 18px; color: var(--primary-gold);">0 VND</strong>
+                    </div>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
+                        (Bằng Tiền két ban đầu + Tiền mặt bán trong ca)
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" style="font-size: 13px; font-weight: 700; color: #fff;">
+                        Tiền mặt thực tế kiểm đếm trong két (VNĐ) *
+                    </label>
+                    <input type="number" id="close-shift-actual-cash" class="form-control" placeholder="Nhập số tiền đếm được thực tế..." min="0" step="1000" required oninput="calcShiftDifference()" style="font-size: 18px; font-weight: 700; color: #2ecc71;">
+                </div>
+
+                <!-- Difference Alert -->
+                <div id="close-shift-diff-box" style="margin-bottom: 16px; padding: 10px 14px; border-radius: var(--radius-md); font-size: 13px; font-weight: 600; display: none;">
+                    <span id="close-shift-diff-text"></span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Ghi chú kết ca</label>
+                    <textarea id="close-shift-notes" class="form-control" rows="2" placeholder="Ghi chú chênh lệch hoặc bàn giao..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="closeModal('close-shift-modal')">Hủy bỏ</button>
+                <button type="submit" class="btn btn-warning btn-sm">
+                    <i class="fas fa-check-double"></i> Xác nhận kết ca & Chốt két
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal: Biên bản kết ca hoàn thành -->
+<div id="shift-report-modal" class="modal-backdrop">
+    <div class="modal-box" style="max-width: 440px;">
+        <div class="modal-header">
+            <h3 style="color: var(--primary-gold);"><i class="fas fa-file-invoice-dollar"></i> Biên bản kết ca</h3>
+            <button class="modal-close-btn" onclick="closeModal('shift-report-modal')">&times;</button>
+        </div>
+        <div class="modal-body" id="shift-report-content" style="font-size: 13px; line-height: 1.6;">
+            <!-- Filled dynamically -->
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary btn-sm" onclick="closeModal('shift-report-modal')">Đóng</button>
+            <button class="btn btn-primary btn-sm" onclick="window.print()">
+                <i class="fas fa-print"></i> In biên bản
+            </button>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -169,6 +325,9 @@ let selectedCategory = 'all';
 let appliedVoucher = null;
 let currentPaymentMethod = 'cash';
 let activePendingOrderId = null; // If editing an existing pending order
+let currentShift = null;
+let currentUser = null;
+let shiftExpectedCash = 0;
 
 // Load Initial Data
 async function initPOS() {
@@ -190,6 +349,9 @@ async function initPOS() {
         renderStaffSelector(staffRes);
         refreshActiveOrders();
 
+        // Kiểm tra và hiển thị ca làm việc của Thu ngân
+        checkShiftStatus();
+
         // Check if URL has ?table_id=
         const urlParams = new URLSearchParams(window.location.search);
         const preselectTableId = urlParams.get('table_id');
@@ -201,6 +363,224 @@ async function initPOS() {
     } catch (e) {
         console.error('POS Init error:', e);
     }
+}
+
+// ── CASHIER SHIFT MANAGEMENT (MỞ CA & KẾT CA) ──
+async function checkShiftStatus() {
+    try {
+        const [meRes, shiftRes] = await Promise.all([
+            apiCall('/api/auth/me'),
+            apiCall('/api/shifts/current')
+        ]);
+        if (meRes.logged_in) {
+            currentUser = meRes.user;
+        }
+
+        const activeBar = document.getElementById('shift-active-bar');
+        const btnManualOpen = document.getElementById('btn-manual-open-shift');
+
+        if (shiftRes.has_open_shift && shiftRes.shift) {
+            currentShift = shiftRes.shift;
+            if (activeBar) activeBar.style.display = 'inline-flex';
+            if (btnManualOpen) btnManualOpen.style.display = 'none';
+
+            document.getElementById('shift-badge-cashier').textContent = currentShift.cashier_name || 'Thu ngân';
+            document.getElementById('shift-badge-cash').textContent = formatVND(currentShift.opening_cash);
+        } else {
+            currentShift = null;
+            if (activeBar) activeBar.style.display = 'none';
+            if (btnManualOpen) btnManualOpen.style.display = 'inline-block';
+
+            // Nếu người dùng là cashier (thu ngân) hoặc manager, tự động mở modal Mở ca ngay lập tức
+            if (currentUser && ['cashier', 'manager', 'owner'].includes(currentUser.role)) {
+                openStartShiftModal();
+            }
+        }
+    } catch (e) {
+        console.error('Error checking shift status:', e);
+    }
+}
+
+function openStartShiftModal() {
+    const now = new Date();
+    const cashierInput = document.getElementById('open-shift-cashier-name');
+    const timeInput = document.getElementById('open-shift-time');
+    const cashInput = document.getElementById('open-shift-cash');
+    const notesInput = document.getElementById('open-shift-notes');
+
+    if (cashierInput) cashierInput.value = currentUser ? (currentUser.staff_name || currentUser.username) : 'Thu ngân';
+    if (timeInput) timeInput.value = now.toLocaleTimeString('vi-VN') + ' - ' + now.toLocaleDateString('vi-VN');
+    if (cashInput && !cashInput.value) cashInput.value = '1000000';
+    if (notesInput) notesInput.value = '';
+
+    openModal('open-shift-modal');
+}
+
+function setQuickOpeningCash(amount) {
+    document.getElementById('open-shift-cash').value = amount;
+}
+
+async function submitOpenShift(e) {
+    e.preventDefault();
+    const cash = parseFloat(document.getElementById('open-shift-cash').value) || 0;
+    const notes = document.getElementById('open-shift-notes').value.trim();
+
+    try {
+        const res = await apiCall('/api/shifts/open', 'POST', {
+            opening_cash: cash,
+            notes: notes
+        });
+        if (res.success) {
+            showToast(res.message);
+            closeModal('open-shift-modal');
+            checkShiftStatus();
+        } else {
+            showToast(res.message || 'Lỗi mở ca', 'error');
+        }
+    } catch (err) {
+        showToast('Lỗi khi mở ca làm việc', 'error');
+    }
+}
+
+async function openCloseShiftModal() {
+    try {
+        const res = await apiCall('/api/shifts/current');
+        if (!res.has_open_shift || !res.shift) {
+            showToast('Không có ca làm việc nào đang mở!', 'warning');
+            return;
+        }
+        const s = res.shift;
+        currentShift = s;
+        shiftExpectedCash = s.expected_cash || 0;
+
+        document.getElementById('close-shift-opening-cash').textContent = formatVND(s.opening_cash);
+        document.getElementById('close-shift-orders-count').textContent = (s.orders_count || 0) + ' đơn';
+        document.getElementById('close-shift-cash-sales').textContent = formatVND(s.cash_sales || 0);
+        document.getElementById('close-shift-card-sales').textContent = formatVND(s.card_sales || 0);
+        document.getElementById('close-shift-expected-cash').textContent = formatVND(shiftExpectedCash);
+        document.getElementById('close-shift-actual-cash').value = '';
+        document.getElementById('close-shift-notes').value = '';
+        document.getElementById('close-shift-diff-box').style.display = 'none';
+
+        openModal('close-shift-modal');
+        setTimeout(() => document.getElementById('close-shift-actual-cash').focus(), 150);
+    } catch (e) {
+        showToast('Lỗi tải thông tin ca', 'error');
+    }
+}
+
+function calcShiftDifference() {
+    const inputVal = document.getElementById('close-shift-actual-cash').value;
+    const diffBox = document.getElementById('close-shift-diff-box');
+    const diffText = document.getElementById('close-shift-diff-text');
+    if (!inputVal) {
+        diffBox.style.display = 'none';
+        return;
+    }
+    const actual = parseFloat(inputVal) || 0;
+    const diff = actual - shiftExpectedCash;
+    diffBox.style.display = 'block';
+
+    if (diff === 0) {
+        diffBox.style.background = 'rgba(46, 204, 113, 0.15)';
+        diffBox.style.border = '1px solid rgba(46, 204, 113, 0.4)';
+        diffBox.style.color = '#2ecc71';
+        diffText.innerHTML = '<i class="fas fa-check-circle"></i> Tiền kiểm đếm KHỚP CHÍNH XÁC với lý thuyết!';
+    } else if (diff > 0) {
+        diffBox.style.background = 'rgba(52, 152, 219, 0.15)';
+        diffBox.style.border = '1px solid rgba(52, 152, 219, 0.4)';
+        diffBox.style.color = '#3498db';
+        diffText.innerHTML = `<i class="fas fa-arrow-trend-up"></i> Két THỪA: <strong>+${formatVND(diff)}</strong>`;
+    } else {
+        diffBox.style.background = 'rgba(231, 76, 60, 0.15)';
+        diffBox.style.border = '1px solid rgba(231, 76, 60, 0.4)';
+        diffBox.style.color = '#e74c3c';
+        diffText.innerHTML = `<i class="fas fa-arrow-trend-down"></i> Két THIẾU: <strong>${formatVND(diff)}</strong>`;
+    }
+}
+
+async function submitCloseShift(e) {
+    e.preventDefault();
+    const actual = parseFloat(document.getElementById('close-shift-actual-cash').value) || 0;
+    const notes = document.getElementById('close-shift-notes').value.trim();
+
+    try {
+        const res = await apiCall('/api/shifts/close', 'POST', {
+            closing_cash: actual,
+            notes: notes
+        });
+        if (res.success && res.shift) {
+            closeModal('close-shift-modal');
+            showToast('Kết ca thành công!');
+            showShiftReport(res.shift);
+            checkShiftStatus();
+        } else {
+            showToast(res.message || 'Lỗi kết ca', 'error');
+        }
+    } catch (e) {
+        showToast('Lỗi khi kết thúc ca làm việc', 'error');
+    }
+}
+
+function showShiftReport(shift) {
+    const diff = (shift.difference || 0);
+    let diffHtml = '';
+    if (diff === 0) {
+        diffHtml = '<span style="color:#2ecc71; font-weight:700;">Khớp 100%</span>';
+    } else if (diff > 0) {
+        diffHtml = `<span style="color:#3498db; font-weight:700;">Thừa +${formatVND(diff)}</span>`;
+    } else {
+        diffHtml = `<span style="color:#e74c3c; font-weight:700;">Thiếu ${formatVND(diff)}</span>`;
+    }
+
+    const content = `
+        <div style="border-bottom: 2px dashed var(--border-subtle); padding-bottom: 12px; margin-bottom: 14px; text-align: center;">
+            <h4 style="font-size: 16px; color: var(--primary-gold); margin-bottom: 4px;">BIÊN BẢN KẾT CA BÁN HÀNG</h4>
+            <div style="font-size: 11px; color: var(--text-muted);">Mã ca: #CA${String(shift.id).padStart(4, '0')} &bull; Thu ngân: <strong>${shift.cashier_name}</strong></div>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+            <span style="color: var(--text-secondary);">Thời gian mở:</span>
+            <span>${shift.opened_at || '-'}</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+            <span style="color: var(--text-secondary);">Thời gian đóng:</span>
+            <span>${shift.closed_at || '-'}</span>
+        </div>
+        <div style="border-top: 1px solid var(--border-subtle); margin: 10px 0;"></div>
+        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+            <span style="color: var(--text-secondary);">Tiền két ban đầu:</span>
+            <strong>${formatVND(shift.opening_cash)}</strong>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+            <span style="color: var(--text-secondary);">Doanh thu tiền mặt:</span>
+            <strong style="color: #2ecc71;">${formatVND(shift.cash_sales)}</strong>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+            <span style="color: var(--text-secondary);">Doanh thu thẻ / CK:</span>
+            <strong style="color: #3498db;">${formatVND(shift.card_sales)}</strong>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+            <span style="color: var(--text-secondary);">Tổng doanh thu ca (${shift.orders_count || 0} đơn):</span>
+            <strong style="color: var(--primary-gold);">${formatVND(shift.total_sales)}</strong>
+        </div>
+        <div style="border-top: 1px solid var(--border-subtle); margin: 10px 0;"></div>
+        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+            <span style="color: var(--text-secondary);">Tiền mặt lý thuyết trong két:</span>
+            <strong>${formatVND(shift.expected_cash)}</strong>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+            <span style="color: var(--text-secondary);">Tiền mặt thực tế kiểm đếm:</span>
+            <strong style="color: #fff; font-size: 15px;">${formatVND(shift.closing_cash)}</strong>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+            <span style="color: var(--text-secondary);">Chênh lệch:</span>
+            ${diffHtml}
+        </div>
+        ${shift.notes ? `<div style="margin-top:10px; font-size:12px; color:var(--text-muted); background:var(--bg-hover); padding:8px; border-radius:4px;">Ghi chú: ${shift.notes}</div>` : ''}
+    `;
+
+    document.getElementById('shift-report-content').innerHTML = content;
+    openModal('shift-report-modal');
 }
 
 // Render Categories
@@ -262,16 +642,22 @@ function renderMenuItems(items) {
     `).join('');
 }
 
-// Render Table Dropdown
+// Render Table Dropdown (Bàn có khách sẽ không hiện ở mục order)
 function renderTableSelector() {
     const select = document.getElementById('cart-table-select');
-    const options = allTables.map(t => {
+    if (!select) return;
+    const currentVal = select.value;
+
+    // Bàn nào có khách rồi thì mục order sẽ không hiện bàn (trừ khi đang nạp chính đơn của bàn đó)
+    const availableTables = allTables.filter(t => t.status !== 'occupied' || (currentVal && String(t.id) === String(currentVal)));
+    const options = availableTables.map(t => {
         let label = `${t.number}${t.area_name ? ` (${t.area_name})` : ''}`;
-        if (t.status === 'occupied') label += ' [Có khách]';
         if (t.status === 'reserved') label += ' [Đã đặt]';
+        if (t.status === 'occupied') label += ' [Đang chọn đơn này]';
         return `<option value="${t.id}">${label}</option>`;
     }).join('');
     select.innerHTML = `<option value="">-- Khách mang về --</option>` + options;
+    if (currentVal) select.value = currentVal;
 }
 
 // Render Staff Dropdown

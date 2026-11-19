@@ -4,12 +4,27 @@
 {% block page_subtitle %}Kiểm soát lượng tồn, định mức tối thiểu & cảnh báo thiếu hụt nguyên vật liệu pha chế{% endblock %}
 
 {% block topbar_action %}
-<button class="btn btn-primary btn-sm" onclick="openAddIngredientModal()">
+<button class="btn btn-secondary btn-sm" id="btn-top-add-recipe" style="display: none;" onclick="openAddRecipeModal()">
+    <i class="fas fa-mortar-pestle"></i> Thêm định lượng món
+</button>
+<button class="btn btn-primary btn-sm" id="btn-top-add-ing" onclick="openAddIngredientModal()">
     <i class="fas fa-plus"></i> Thêm nguyên liệu mới
 </button>
 {% endblock %}
 
 {% block content %}
+<!-- Tab Navigation -->
+<div class="tabs-nav" style="display: flex; gap: 8px; margin-bottom: 20px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 12px;">
+    <button class="tab-btn active" id="tab-btn-inventory" onclick="switchWarehouseTab('inventory')" style="background: rgba(200, 169, 126, 0.15); border: 1px solid rgba(200, 169, 126, 0.3); color: var(--primary-gold); padding: 8px 18px; border-radius: var(--radius-md); font-weight: 700; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; transition: var(--transition);">
+        <i class="fas fa-boxes-stacked"></i> Tồn kho nguyên liệu
+    </button>
+    <button class="tab-btn" id="tab-btn-recipes" onclick="switchWarehouseTab('recipes')" style="background: transparent; border: 1px solid transparent; color: var(--text-secondary); padding: 8px 18px; border-radius: var(--radius-md); font-weight: 700; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; transition: var(--transition);">
+        <i class="fas fa-mortar-pestle"></i> Công thức & Khấu trừ món
+    </button>
+</div>
+
+<!-- TAB 1: TỒN KHO NGUYÊN LIỆU -->
+<div id="tab-content-inventory">
 <!-- Inventory Stats Cards -->
 <div class="stats-grid">
     <div class="stat-card">
@@ -95,6 +110,61 @@
                 </tr>
             </tbody>
         </table>
+    </div>
+</div>
+</div> <!-- End tab-content-inventory -->
+
+<!-- TAB 2: CÔNG THỨC & KHẤU TRỪ MÓN -->
+<div id="tab-content-recipes" style="display: none;">
+    <!-- Info Banner -->
+    <div style="margin-bottom: 20px; padding: 14px 18px; background: rgba(200, 169, 126, 0.1); border: 1px solid rgba(200, 169, 126, 0.3); border-radius: var(--radius-md); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+            <i class="fas fa-circle-nodes fa-2x" style="color: var(--primary-gold);"></i>
+            <div>
+                <h4 style="font-size: 14px; font-weight: 700; color: var(--primary-gold); margin-bottom: 3px;">
+                    Cơ chế Khấu trừ Kho Tự động theo Công thức
+                </h4>
+                <p style="font-size: 12px; margin: 0; color: var(--text-secondary);">
+                    Mỗi khi thu ngân thanh toán đơn hàng có món này, hệ thống sẽ tự động trừ lượng nguyên liệu tương ứng trong kho.
+                </p>
+            </div>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="openAddRecipeModal()">
+            <i class="fas fa-plus"></i> Thêm định lượng món
+        </button>
+    </div>
+
+    <!-- Recipes Filter & Table -->
+    <div class="card">
+        <div class="card-header">
+            <div class="card-title">
+                <i class="fas fa-mortar-pestle"></i> Danh sách công thức & định lượng nguyên liệu món
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <input type="text" id="recipe-search-input" class="form-control" placeholder="Tìm tên món hoặc nguyên liệu..." style="width: 280px;" oninput="filterRecipesTable()">
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th style="width: 220px;">Tên món</th>
+                        <th style="width: 140px;">Danh mục</th>
+                        <th style="width: 130px;">Giá bán</th>
+                        <th>Công thức định lượng nguyên liệu</th>
+                        <th style="text-align: right; width: 140px;">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody id="recipes-tbody">
+                    <tr>
+                        <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 30px;">
+                            <i class="fas fa-spinner fa-spin fa-2x"></i>
+                            <p style="margin-top: 10px;">Đang tải danh sách công thức...</p>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>
 
@@ -216,6 +286,45 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary btn-sm" onclick="closeModal('restock-modal')">Hủy</button>
                 <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-plus"></i> Xác nhận nhập kho</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal: Thêm / Cập nhật định lượng món (Add Recipe Modal) -->
+<div id="add-recipe-modal" class="modal-backdrop">
+    <div class="modal-box" style="max-width: 480px;">
+        <div class="modal-header">
+            <h3 style="color: var(--primary-gold);"><i class="fas fa-mortar-pestle"></i> Thêm định lượng nguyên liệu cho món</h3>
+            <button class="modal-close-btn" onclick="closeModal('add-recipe-modal')">&times;</button>
+        </div>
+        <form id="add-recipe-form" onsubmit="submitAddRecipe(event)">
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Chọn món trong thực đơn *</label>
+                    <select id="recipe-menu-item-select" class="form-select" required>
+                        <!-- Populated dynamically -->
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Chọn nguyên liệu trong kho *</label>
+                    <select id="recipe-ingredient-select" class="form-select" required onchange="onRecipeIngredientChanged()">
+                        <!-- Populated dynamically -->
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Định lượng dùng cho 1 phần (<span id="recipe-unit-hint" style="color: var(--primary-gold); font-weight: 700;">-</span>) *</label>
+                    <input type="number" id="recipe-quantity-needed" class="form-control" placeholder="Ví dụ: 25 (cho 25g cà phê) hoặc 30 (cho 30ml sữa)" min="0.001" step="any" required>
+                    <small style="color: var(--text-muted); font-size: 11px; margin-top: 4px; display: block;">
+                        Số lượng này sẽ được tự động trừ trong kho mỗi khi bán được 1 phần món này.
+                    </small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="closeModal('add-recipe-modal')">Hủy</button>
+                <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-save"></i> Lưu công thức</button>
             </div>
         </form>
     </div>
@@ -485,6 +594,210 @@ function deleteIngredient(id, name) {
                 updateSummaryCards();
             }
             showToast('Lỗi khi xóa nguyên liệu', 'error');
+        }
+    });
+}
+
+// ── TAB SWITCHING ──
+let currentWarehouseTab = 'inventory';
+let allRecipesList = [];
+let allMenuList = [];
+
+function switchWarehouseTab(tab) {
+    currentWarehouseTab = tab;
+    const btnInv = document.getElementById('tab-btn-inventory');
+    const btnRec = document.getElementById('tab-btn-recipes');
+    const tabInv = document.getElementById('tab-content-inventory');
+    const tabRec = document.getElementById('tab-content-recipes');
+    const btnAddIng = document.getElementById('btn-top-add-ing');
+    const btnAddRec = document.getElementById('btn-top-add-recipe');
+
+    if (tab === 'inventory') {
+        btnInv.style.background = 'rgba(200, 169, 126, 0.15)';
+        btnInv.style.border = '1px solid rgba(200, 169, 126, 0.3)';
+        btnInv.style.color = 'var(--primary-gold)';
+        btnRec.style.background = 'transparent';
+        btnRec.style.border = '1px solid transparent';
+        btnRec.style.color = 'var(--text-secondary)';
+
+        tabInv.style.display = 'block';
+        tabRec.style.display = 'none';
+        if (btnAddIng) btnAddIng.style.display = 'inline-block';
+        if (btnAddRec) btnAddRec.style.display = 'none';
+    } else {
+        btnRec.style.background = 'rgba(200, 169, 126, 0.15)';
+        btnRec.style.border = '1px solid rgba(200, 169, 126, 0.3)';
+        btnRec.style.color = 'var(--primary-gold)';
+        btnInv.style.background = 'transparent';
+        btnInv.style.border = '1px solid transparent';
+        btnInv.style.color = 'var(--text-secondary)';
+
+        tabInv.style.display = 'none';
+        tabRec.style.display = 'block';
+        if (btnAddIng) btnAddIng.style.display = 'none';
+        if (btnAddRec) btnAddRec.style.display = 'inline-block';
+
+        loadRecipes();
+    }
+}
+
+// ── RECIPES MANAGEMENT (CÔNG THỨC & ĐỊNH LƯỢNG) ──
+async function loadRecipes() {
+    try {
+        const [recipesData, menuData] = await Promise.all([
+            apiCall('/api/recipes'),
+            apiCall('/api/menu')
+        ]);
+        allRecipesList = Array.isArray(recipesData) ? recipesData : [];
+        allMenuList = Array.isArray(menuData) ? menuData : [];
+        renderRecipesTable(allRecipesList);
+    } catch (e) {
+        console.error('Error loading recipes:', e);
+    }
+}
+
+function renderRecipesTable(items) {
+    const tbody = document.getElementById('recipes-tbody');
+    if (!tbody) return;
+
+    if (!items || items.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 40px;">
+                    <i class="fas fa-mortar-pestle fa-2x" style="margin-bottom: 10px; opacity: 0.5;"></i>
+                    <p>Chưa có món nào trong thực đơn. Vui lòng thêm món trước khi cấu hình công thức.</p>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    tbody.innerHTML = items.map(item => {
+        const hasRecipes = item.ingredients && item.ingredients.length > 0;
+        const recipeBadges = hasRecipes 
+            ? item.ingredients.map(ing => `
+                <span class="badge" style="background: var(--bg-hover); color: #fff; padding: 6px 10px; border: 1px solid var(--border-subtle); display: inline-flex; align-items: center; gap: 8px; margin: 3px; font-size: 12px; border-radius: var(--radius-sm);">
+                    <i class="fas fa-seedling" style="color: var(--primary-gold); font-size: 11px;"></i>
+                    <strong>${ing.quantity_needed} ${ing.ingredient_unit}</strong> ${ing.ingredient_name}
+                    <button type="button" onclick="deleteRecipeItem(${ing.id}, '${item.menu_item_name}')" style="background: none; border: none; color: var(--danger); cursor: pointer; padding: 0 3px; font-size: 13px;" title="Xóa nguyên liệu khỏi món">&times;</button>
+                </span>
+            `).join('')
+            : `<span style="color: var(--text-muted); font-size: 12px; font-style: italic;">Chưa cấu hình công thức (bán không trừ kho)</span>`;
+
+        return `
+            <tr>
+                <td>
+                    <strong style="color: var(--text-primary); font-size: 14px;">${item.menu_item_name}</strong>
+                    ${!item.available ? '<span class="badge badge-secondary" style="margin-left:6px; font-size:10px;">Ngưng bán</span>' : ''}
+                </td>
+                <td><span class="badge badge-secondary">${item.category_name || 'Khác'}</span></td>
+                <td><strong style="color: var(--primary-gold);">${formatVND(item.price)}</strong></td>
+                <td>
+                    <div style="display: flex; flex-wrap: wrap; align-items: center;">
+                        ${recipeBadges}
+                    </div>
+                </td>
+                <td style="text-align: right;">
+                    <button class="btn btn-secondary btn-sm" onclick="openAddRecipeModal(${item.menu_item_id})" title="Thêm hoặc sửa định lượng">
+                        <i class="fas fa-plus"></i> Thêm định lượng
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function filterRecipesTable() {
+    const q = (document.getElementById('recipe-search-input').value || '').trim().toLowerCase();
+    if (!q) {
+        renderRecipesTable(allRecipesList);
+        return;
+    }
+    const filtered = allRecipesList.filter(item => {
+        const matchName = (item.menu_item_name || '').toLowerCase().includes(q);
+        const matchCat = (item.category_name || '').toLowerCase().includes(q);
+        const matchIng = item.ingredients && item.ingredients.some(ing => (ing.ingredient_name || '').toLowerCase().includes(q));
+        return matchName || matchCat || matchIng;
+    });
+    renderRecipesTable(filtered);
+}
+
+async function openAddRecipeModal(preselectedItemId = null) {
+    if (allMenuList.length === 0 || allIngredientsList.length === 0) {
+        const [mRes, iRes] = await Promise.all([
+            apiCall('/api/menu'),
+            apiCall('/api/ingredients')
+        ]);
+        allMenuList = mRes || [];
+        allIngredientsList = iRes || [];
+    }
+
+    // Populate Menu Items Select
+    const itemSelect = document.getElementById('recipe-menu-item-select');
+    itemSelect.innerHTML = allMenuList.map(m => `
+        <option value="${m.id}" ${preselectedItemId && m.id === preselectedItemId ? 'selected' : ''}>${m.name} (${m.category}) - ${formatVND(m.price)}</option>
+    `).join('');
+
+    // Populate Ingredients Select
+    const ingSelect = document.getElementById('recipe-ingredient-select');
+    ingSelect.innerHTML = allIngredientsList.map(ing => `
+        <option value="${ing.id}" data-unit="${ing.unit}">${ing.name} (Đơn vị: ${ing.unit})</option>
+    `).join('');
+
+    onRecipeIngredientChanged();
+    document.getElementById('recipe-quantity-needed').value = '';
+    openModal('add-recipe-modal');
+}
+
+function onRecipeIngredientChanged() {
+    const ingSelect = document.getElementById('recipe-ingredient-select');
+    const selectedOpt = ingSelect.options[ingSelect.selectedIndex];
+    const unit = selectedOpt ? selectedOpt.getAttribute('data-unit') : 'đơn vị';
+    document.getElementById('recipe-unit-hint').textContent = unit || '-';
+}
+
+async function submitAddRecipe(e) {
+    e.preventDefault();
+    const menuItemId = parseInt(document.getElementById('recipe-menu-item-select').value);
+    const ingredientId = parseInt(document.getElementById('recipe-ingredient-select').value);
+    const qty = parseFloat(document.getElementById('recipe-quantity-needed').value);
+
+    if (!menuItemId || !ingredientId || !qty || qty <= 0) {
+        showToast('Vui lòng nhập định lượng hợp lệ > 0!', 'warning');
+        return;
+    }
+
+    try {
+        const res = await apiCall('/api/recipes', 'POST', {
+            menu_item_id: menuItemId,
+            ingredient_id: ingredientId,
+            quantity_needed: qty
+        });
+
+        if (res.success) {
+            showToast('Đã lưu công thức & định lượng thành công!');
+            closeModal('add-recipe-modal');
+            loadRecipes();
+        } else {
+            showToast(res.message || 'Lỗi lưu công thức', 'error');
+        }
+    } catch (err) {
+        showToast('Lỗi khi lưu công thức', 'error');
+    }
+}
+
+function deleteRecipeItem(recipeId, itemName) {
+    showConfirm('Xóa nguyên liệu khỏi món', `Bạn có chắc muốn xóa nguyên liệu này khỏi công thức "${itemName}" không?`, async () => {
+        try {
+            const res = await apiCall(`/api/recipes/${recipeId}`, 'DELETE');
+            if (res.success) {
+                showToast('Đã xóa nguyên liệu khỏi công thức!');
+                loadRecipes();
+            } else {
+                showToast(res.message || 'Lỗi khi xóa', 'error');
+            }
+        } catch (e) {
+            showToast('Lỗi khi xóa công thức', 'error');
         }
     });
 }

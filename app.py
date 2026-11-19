@@ -7,7 +7,7 @@ from models import (
     Ingredient, MenuIngredient,
     Member, PointTransaction, PointSetting,
     User, ShiftSchedule, SalaryRecord, OrderHistory, Attendance,
-    Area
+    Area, CashierShift
 )
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
@@ -49,8 +49,8 @@ def require_role(*roles):
 def login_page():
     u = get_current_user()
     if u:
-        redirect_map = {'owner': '/', 'manager': '/', 'cashier': '/orders', 'barista': '/barista', 'waiter': '/tables'}
-        return redirect(redirect_map.get(u.role, '/'))
+        redirect_map = {'owner': '/orders', 'manager': '/orders', 'cashier': '/orders', 'waiter': '/orders', 'barista': '/barista'}
+        return redirect(redirect_map.get(u.role, '/orders'))
     return render_template('login.html')
 
 @app.route('/api/auth/login', methods=['POST'])
@@ -65,8 +65,8 @@ def api_login():
     session['user_role'] = user.role
     user.last_login = datetime.now()
     db.session.commit()
-    redirect_map = {'owner': '/', 'manager': '/', 'cashier': '/orders', 'barista': '/barista', 'waiter': '/tables'}
-    return jsonify({'success': True, 'user': user.to_dict(), 'redirect_url': redirect_map.get(user.role, '/')})
+    redirect_map = {'owner': '/orders', 'manager': '/orders', 'cashier': '/orders', 'waiter': '/orders', 'barista': '/barista'}
+    return jsonify({'success': True, 'user': user.to_dict(), 'redirect_url': redirect_map.get(user.role, '/orders')})
 
 @app.route('/api/auth/logout', methods=['POST'])
 def api_logout():
@@ -419,6 +419,191 @@ def delete_attendance_record(id):
         db.session.commit()
     return jsonify({'success': True, 'message': 'Đã xóa bản ghi chấm công!'})
 
+# ==============================================================================
+# CASHIER SHIFTS (MỞ CA & KẾT CA THU NGÂN)
+# ==============================================================================
+
+@app.route('/api/shifts/current', methods=['GET'])
+def get_current_shift():
+    u = get_current_user()
+    if not u:
+        return jsonify({'has_open_shift': False, 'message': 'Chưa đăng nhập'}), 401
+    
+    # Tìm ca đang mở (status='open')
+    shift = CashierShift.query.filter_by(status='open').order_by(CashierShift.id.desc()).first()
+    if not shift:
+        return jsonify({'has_open_shift': False})
+    
+    # Doanh thu trong ca từ lúc opened_at đến hiện tại
+    orders = Order.query.filter(Order.created_at >= shift.opened_at, Order.status == 'completed').all()
+    cash_sales = sum(o.total for o in orders if getattr(o, 'payment_method', 'cash') == 'cash')
+    card_sales = sum(o.total for o in orders if getattr(o, 'payment_method', 'cash') in ['card', 'transfer'])
+    total_sales = cash_sales + card_sales
+    orders_count = len(orders)
+    expected_cash = (shift.opening_cash or 0.0) + cash_sales
+
+    shift_data = shift.to_dict()
+    shift_data['total_sales'] = total_sales
+    shift_data['cash_sales'] = cash_sales
+    shift_data['card_sales'] = card_sales
+    shift_data['orders_count'] = orders_count
+    shift_data['expected_cash'] = expected_cash
+
+    return jsonify({
+        'has_open_shift': True,
+        'shift': shift_data
+    })
+
+@app.route('/api/shifts/open', methods=['POST'])
+def open_shift():
+    u = get_current_user()
+    if not u:
+        return jsonify({'success': False, 'message': 'Chưa đăng nhập'}), 401
+    
+    # Kiểm tra ca đang mở
+    existing = CashierShift.query.filter_by(status='open').first()
+    if existing:
+        return jsonify({
+            'success': False, 
+            'message': f'Đang có ca mở bởi {existing.cashier_name}! Vui lòng kết ca trước khi mở ca mới.'
+        }), 400
+    
+    data = request.json or {}
+    opening_cash = float(data.get('opening_cash', 0.0))
+    notes = data.get('notes', '').strip()
+    
+    cashier_name = u.staff.name if u.staff else (u.full_name or u.username)
+    shift = CashierShift(
+        user_id=u.id,
+        cashier_name=cashier_name,
+        opening_cash=opening_cash,
+        status='open',
+        opened_at=datetime.now(),
+        notes=notes
+    )
+    db.session.add(shift)
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'message': f'Đã mở ca thành công! Tiền két ban đầu: {int(opening_cash):,} VND',
+        'shift': shift.to_dict()
+    })
+
+@app.route('/api/shifts/close', methods=['POST'])
+def close_shift():
+    u = get_current_user()
+    if not u:
+        return jsonify({'success': False, 'message': 'Chưa đăng nhập'}), 401
+    
+    shift = CashierShift.query.filter_by(status='open').order_by(CashierShift.id.desc()).first()
+    if not shift:
+        return jsonify({'success': False, 'message': 'Không có ca làm việc nào đang mở!'}), 400
+    
+    data = request.json or {}
+    closing_cash = float(data.get('closing_cash', 0.0))
+    notes = data.get('notes', '').strip()
+    
+    orders = Order.query.filter(Order.created_at >= shift.opened_at, Order.status == 'completed').all()
+    cash_sales = sum(o.total for o in orders if getattr(o, 'payment_method', 'cash') == 'cash')
+    card_sales = sum(o.total for o in orders if getattr(o, 'payment_method', 'cash') in ['card', 'transfer'])
+    total_sales = cash_sales + card_sales
+    orders_count = len(orders)
+    expected_cash = (shift.opening_cash or 0.0) + cash_sales
+    difference = closing_cash - expected_cash
+
+    shift.closing_cash = closing_cash
+    shift.expected_cash = expected_cash
+    shift.difference = difference
+    shift.total_sales = total_sales
+    shift.cash_sales = cash_sales
+    shift.card_sales = card_sales
+    shift.orders_count = orders_count
+    shift.closed_at = datetime.now()
+    shift.status = 'closed'
+    if notes:
+        shift.notes = (shift.notes + ' | ' + notes) if shift.notes else notes
+    
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'message': 'Đã kết ca và chốt doanh thu thành công!',
+        'shift': shift.to_dict()
+    })
+
+@app.route('/api/shifts/history', methods=['GET'])
+def get_shift_history():
+    shifts = CashierShift.query.order_by(CashierShift.id.desc()).limit(30).all()
+    return jsonify([s.to_dict() for s in shifts])
+
+# ==============================================================================
+# RECIPES / ĐỊNH LƯỢNG NGUYÊN LIỆU (CÔNG THỨC MÓN)
+# ==============================================================================
+
+@app.route('/api/recipes', methods=['GET'])
+def get_recipes():
+    try:
+        menu_items = MenuItem.query.all()
+        result = []
+        for item in menu_items:
+            recipes = MenuIngredient.query.filter_by(menu_item_id=item.id).all()
+            result.append({
+                'menu_item_id': item.id,
+                'menu_item_name': item.name,
+                'category_name': item.category or '',
+                'price': item.price,
+                'available': item.available,
+                'ingredients': [r.to_dict() for r in recipes]
+            })
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/recipes', methods=['POST'])
+def add_recipe_item():
+    u = get_current_user()
+    if not u or u.role not in ['owner', 'manager']:
+        return jsonify({'success': False, 'message': 'Không có quyền cấu hình công thức!'}), 403
+    
+    data = request.json or {}
+    menu_item_id = data.get('menu_item_id')
+    ingredient_id = data.get('ingredient_id')
+    quantity_needed = float(data.get('quantity_needed', 0.0))
+
+    if not menu_item_id or not ingredient_id or quantity_needed <= 0:
+        return jsonify({'success': False, 'message': 'Vui lòng chọn món, nguyên liệu và nhập số lượng > 0!'}), 400
+
+    existing = MenuIngredient.query.filter_by(menu_item_id=menu_item_id, ingredient_id=ingredient_id).first()
+    if existing:
+        existing.quantity_needed = quantity_needed
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Đã cập nhật định lượng nguyên liệu!', 'recipe': existing.to_dict()})
+    
+    rec = MenuIngredient(
+        menu_item_id=menu_item_id,
+        ingredient_id=ingredient_id,
+        quantity_needed=quantity_needed
+    )
+    db.session.add(rec)
+    db.session.commit()
+
+    return jsonify({'success': True, 'message': 'Đã thêm nguyên liệu vào công thức món!', 'recipe': rec.to_dict()})
+
+@app.route('/api/recipes/<int:id>', methods=['DELETE'])
+def delete_recipe_item(id):
+    u = get_current_user()
+    if not u or u.role not in ['owner', 'manager']:
+        return jsonify({'success': False, 'message': 'Không có quyền xóa công thức!'}), 403
+    
+    rec = MenuIngredient.query.get(id)
+    if not rec:
+        return jsonify({'success': False, 'message': 'Không tìm thấy mục công thức!'}), 404
+    
+    db.session.delete(rec)
+    db.session.commit()
+    return jsonify({'success': True, 'message': 'Đã xóa nguyên liệu khỏi công thức!'})
+
 # ── SALARY ──
 @app.route('/salary')
 def salary_page():
@@ -581,16 +766,19 @@ def barista_complete_items():
 # ==============================================================================
 
 def get_user_home_url(role):
-    if role == 'cashier':
-        return '/orders'
-    elif role == 'barista':
+    if role == 'barista':
         return '/barista'
-    elif role == 'waiter':
-        return '/tables'
-    return '/'
+    return '/orders'
 
 @app.route('/')
 def index():
+    u = get_current_user()
+    if not u:
+        return redirect('/login')
+    return redirect(get_user_home_url(u.role))
+
+@app.route('/dashboard')
+def dashboard_page():
     u = get_current_user()
     if not u:
         return redirect('/login')

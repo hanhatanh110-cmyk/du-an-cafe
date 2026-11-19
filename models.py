@@ -482,6 +482,53 @@ class Attendance(db.Model):
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else ''
         }
 
+class CashierShift(db.Model):
+    """Ca làm việc của Thu ngân: Tiền két đầu ca, Doanh thu trong ca, Chốt két kết ca"""
+    __tablename__ = 'cashier_shifts'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    cashier_name = db.Column(db.String(100), nullable=True)
+    opened_at = db.Column(db.DateTime, default=datetime.now)
+    closed_at = db.Column(db.DateTime, nullable=True)
+    status = db.Column(db.String(20), default='open')  # 'open', 'closed'
+
+    opening_cash = db.Column(db.Float, default=0.0)      # Tiền két ban đầu khi mở ca
+    closing_cash = db.Column(db.Float, nullable=True)    # Tiền mặt thực tế kiểm đếm khi kết ca
+    expected_cash = db.Column(db.Float, nullable=True)   # Tiền lý thuyết (opening_cash + cash_sales)
+    difference = db.Column(db.Float, nullable=True)      # Chênh lệch (closing_cash - expected_cash)
+
+    total_sales = db.Column(db.Float, default=0.0)       # Tổng doanh thu ca
+    cash_sales = db.Column(db.Float, default=0.0)        # Doanh thu tiền mặt
+    card_sales = db.Column(db.Float, default=0.0)        # Doanh thu thẻ / chuyển khoản
+    orders_count = db.Column(db.Integer, default=0)      # Số đơn hoàn thành
+
+    notes = db.Column(db.String(255), nullable=True)
+
+    user = db.relationship('User', lazy=True)
+
+    def to_dict(self):
+        name = self.cashier_name
+        if not name and self.user:
+            name = self.user.staff.name if self.user.staff else self.user.username
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'cashier_name': name or 'Thu ngân',
+            'opened_at': self.opened_at.strftime('%Y-%m-%d %H:%M:%S') if self.opened_at else '',
+            'closed_at': self.closed_at.strftime('%Y-%m-%d %H:%M:%S') if self.closed_at else '',
+            'status': self.status,
+            'opening_cash': float(self.opening_cash or 0.0),
+            'closing_cash': float(self.closing_cash or 0.0) if self.closing_cash is not None else None,
+            'expected_cash': float(self.expected_cash or 0.0) if self.expected_cash is not None else None,
+            'difference': float(self.difference or 0.0) if self.difference is not None else None,
+            'total_sales': float(self.total_sales or 0.0),
+            'cash_sales': float(self.cash_sales or 0.0),
+            'card_sales': float(self.card_sales or 0.0),
+            'orders_count': int(self.orders_count or 0),
+            'notes': self.notes or ''
+        }
+
 class OrderHistory(db.Model):
     __tablename__ = 'order_history'
     id = db.Column(db.Integer, primary_key=True)
