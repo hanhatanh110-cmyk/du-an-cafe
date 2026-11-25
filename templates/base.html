@@ -2,7 +2,10 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0c0d0e">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>Cafe Antigravity - Quản lý quán cà phê</title>
     <!-- Font Awesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
@@ -23,6 +26,9 @@
                     <h2>ANTIGRAVITY</h2>
                     <span>Cafe &amp; Lounge</span>
                 </div>
+                <button type="button" class="sidebar-close-mobile" onclick="closeMobileDrawer()" title="Đóng menu">
+                    <i class="fas fa-xmark"></i>
+                </button>
             </div>
 
             <ul class="nav-menu">
@@ -108,6 +114,9 @@
             </div>
         </aside>
 
+        <!-- Mobile Drawer Backdrop -->
+        <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeMobileDrawer()"></div>
+
         <!-- Main Workspace -->
         <div class="main-wrapper" id="main-wrapper">
             <!-- Topbar Header -->
@@ -135,6 +144,30 @@
                 {% block content %}{% endblock %}
             </main>
         </div>
+
+        <!-- Mobile Bottom Navigation Bar -->
+        <nav class="mobile-bottom-nav" id="mobile-bottom-nav">
+            <a href="/orders" class="mobile-nav-item {% if active_page == 'orders' %}active{% endif %}">
+                <i class="fas fa-cash-register"></i>
+                <span>Bán hàng</span>
+            </a>
+            <a href="/tables" class="mobile-nav-item {% if active_page == 'tables' %}active{% endif %}">
+                <i class="fas fa-couch"></i>
+                <span>Bàn</span>
+            </a>
+            <a href="/barista" class="mobile-nav-item {% if active_page == 'barista' %}active{% endif %}">
+                <i class="fas fa-blender"></i>
+                <span>Pha chế</span>
+            </a>
+            <a href="/schedule" class="mobile-nav-item {% if active_page == 'schedule' %}active{% endif %}">
+                <i class="fas fa-calendar-alt"></i>
+                <span>Ca làm</span>
+            </a>
+            <button type="button" class="mobile-nav-item {% if active_page in ['dashboard', 'menu', 'members', 'ingredients', 'vouchers', 'staff', 'salary'] %}active{% endif %}" onclick="openMobileDrawer()">
+                <i class="fas fa-bars"></i>
+                <span>Menu</span>
+            </button>
+        </nav>
     </div>
 
     <!-- Toast Notification Container -->
@@ -143,11 +176,23 @@
     <!-- Main JavaScript Scripts -->
     <script src="/static/js/main.js"></script>
     <script>
-    // ── Sidebar Toggle ──────────────────────────────────────────
+    // ── Sidebar Toggle (Desktop Collapse + Mobile Drawer) ──────
+    function isMobileViewport() {
+        return window.innerWidth <= 991;
+    }
+
+    function openMobileDrawer() {
+        const layout = document.getElementById('app-layout');
+        if (layout) layout.classList.add('mobile-sidebar-open');
+    }
+
+    function closeMobileDrawer() {
+        const layout = document.getElementById('app-layout');
+        if (layout) layout.classList.remove('mobile-sidebar-open');
+    }
+
     (function() {
         const layout   = document.getElementById('app-layout');
-        const sidebar  = document.getElementById('sidebar');
-        const wrapper  = document.getElementById('main-wrapper');
         const btn      = document.getElementById('sidebar-toggle');
         const KEY      = 'sidebar_collapsed';
 
@@ -159,13 +204,28 @@
             }
         }
 
-        // Restore saved preference
+        // Restore saved preference (only impacts desktop via CSS media query)
         applyState(localStorage.getItem(KEY) === '1');
 
         btn.addEventListener('click', function() {
-            const collapsed = layout.classList.contains('sidebar-collapsed');
-            applyState(!collapsed);
-            localStorage.setItem(KEY, collapsed ? '0' : '1');
+            if (isMobileViewport()) {
+                layout.classList.toggle('mobile-sidebar-open');
+            } else {
+                const collapsed = layout.classList.contains('sidebar-collapsed');
+                applyState(!collapsed);
+                localStorage.setItem(KEY, collapsed ? '0' : '1');
+            }
+        });
+
+        // Auto-close mobile drawer when navigating
+        document.querySelectorAll('.sidebar .nav-link').forEach(link => {
+            link.addEventListener('click', () => {
+                if (isMobileViewport()) closeMobileDrawer();
+            });
+        });
+
+        window.addEventListener('resize', () => {
+            if (!isMobileViewport()) closeMobileDrawer();
         });
     })();
 
@@ -217,6 +277,7 @@
         // Ẩn: Tổng quan, Thực đơn, Kho nguyên liệu, Nhân sự, Bảng lương
         if (role === 'cashier') {
             hideNav('a[href="/"]');
+            hideNav('a[href="/dashboard"]');
             hideNav('a[href="/menu"]');
             hideNav('a[href="/ingredients"]');
             hideNav('a[href="/staff"]');
@@ -229,6 +290,7 @@
         // Ẩn: Tổng quan, Thực đơn, Thẻ thành viên, Kho nguyên liệu, Mã giảm giá, Nhân sự, Bảng lương
         if (role === 'waiter' || role === 'barista') {
             hideNav('a[href="/"]');
+            hideNav('a[href="/dashboard"]');
             hideNav('a[href="/menu"]');
             hideNav('a[href="/members"]');
             hideNav('a[href="/ingredients"]');

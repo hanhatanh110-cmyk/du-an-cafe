@@ -3,7 +3,7 @@
 {% block page_subtitle %}Hàng đợi chế biến đồ uống &amp; theo dõi đơn hàng thời gian thực{% endblock %}
 
 {% block topbar_action %}
-<div style="display:flex;gap:10px;align-items:center;">
+<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
     <div style="font-size:12px;color:var(--text-secondary);background:var(--bg-surface);padding:6px 12px;border-radius:var(--radius-sm);border:1px solid var(--border-subtle);display:flex;align-items:center;gap:6px;">
         <i class="fas fa-arrows-rotate fa-spin" id="refresh-spinner" style="display:none;color:var(--primary-gold);"></i>
         <span>Tự làm mới sau: <strong id="refresh-timer" style="color:var(--primary-gold);">30</strong>s</span>
@@ -56,7 +56,7 @@
 </div>
 
 <!-- Batch Action Toolbar (When items selected) -->
-<div id="batch-toolbar" style="display:none;background:var(--bg-card);border:1px solid var(--primary-gold);border-radius:var(--radius-md);padding:12px 20px;margin-bottom:20px;display:none;align-items:center;justify-content:space-between;box-shadow:var(--shadow-md);">
+<div id="batch-toolbar" style="display:none;background:var(--bg-card);border:1px solid var(--primary-gold);border-radius:var(--radius-md);padding:12px 16px;margin-bottom:20px;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;box-shadow:var(--shadow-md);">
     <div style="display:flex;align-items:center;gap:12px;">
         <i class="fas fa-check-double" style="color:var(--primary-gold);"></i>
         <span>Đã chọn <strong id="selected-items-count" style="color:var(--primary-gold);">0</strong> món cần pha chế</span>

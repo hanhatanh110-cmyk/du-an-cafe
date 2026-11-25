@@ -30,7 +30,17 @@
 {% endblock %}
 
 {% block content %}
-<div class="pos-layout">
+<!-- Mobile POS View Tabs (Visible on <= 991px) -->
+<div class="mobile-pos-tabs" id="mobile-pos-tabs">
+    <button type="button" class="mobile-pos-tab-btn active" id="mobile-tab-menu-btn" onclick="mobileSwitchPosTab('menu')">
+        <i class="fas fa-mug-saucer"></i> Thực đơn
+    </button>
+    <button type="button" class="mobile-pos-tab-btn" id="mobile-tab-cart-btn" onclick="mobileSwitchPosTab('cart')">
+        <i class="fas fa-cart-shopping"></i> Giỏ hàng (<span id="mobile-pos-tab-qty">0</span>)
+    </button>
+</div>
+
+<div class="pos-layout" id="pos-layout">
     <!-- Left Column: Menu Items Selection -->
     <div class="pos-menu-panel">
         <div class="pos-menu-header">
@@ -144,6 +154,19 @@
             </div>
         </div>
     </div>
+</div>
+
+<!-- Mobile Floating Cart Bar (Visible on <= 991px when items > 0) -->
+<div class="mobile-float-cart hidden-empty" id="mobile-float-cart" onclick="mobileSwitchPosTab('cart')">
+    <div style="display:flex; align-items:center; gap:10px;">
+        <span class="badge badge-gold" style="font-size:13px; padding:5px 10px;">
+            <i class="fas fa-shopping-bag"></i> <span id="mobile-float-qty">0</span> món
+        </span>
+        <strong id="mobile-float-total" style="color:var(--primary-gold); font-size:15px;">0 VND</strong>
+    </div>
+    <span class="btn btn-primary btn-sm" style="padding:7px 14px;">
+        Xem giỏ <i class="fas fa-arrow-right"></i>
+    </span>
 </div>
 
 <!-- Modal: Đơn hàng đang phục vụ (Active Orders) -->
@@ -775,6 +798,38 @@ function renderCart() {
     document.getElementById('cart-total-qty').textContent = totalQty;
     document.getElementById('cart-subtotal').textContent = formatVND(subtotal);
     document.getElementById('cart-final-total').textContent = formatVND(finalTotal);
+
+    // Sync Mobile POS tab badge & floating cart bar
+    const mobileTabQty = document.getElementById('mobile-pos-tab-qty');
+    const mobileFloatCart = document.getElementById('mobile-float-cart');
+    const mobileFloatQty = document.getElementById('mobile-float-qty');
+    const mobileFloatTotal = document.getElementById('mobile-float-total');
+    if (mobileTabQty) mobileTabQty.textContent = totalQty;
+    if (mobileFloatQty) mobileFloatQty.textContent = totalQty;
+    if (mobileFloatTotal) mobileFloatTotal.textContent = formatVND(finalTotal);
+    if (mobileFloatCart) {
+        if (totalQty > 0) mobileFloatCart.classList.remove('hidden-empty');
+        else mobileFloatCart.classList.add('hidden-empty');
+    }
+}
+
+// Mobile POS Tab Switcher (Thực đơn <-> Giỏ hàng)
+function mobileSwitchPosTab(tab) {
+    const layout = document.getElementById('pos-layout');
+    const btnMenu = document.getElementById('mobile-tab-menu-btn');
+    const btnCart = document.getElementById('mobile-tab-cart-btn');
+    if (!layout) return;
+
+    if (tab === 'cart') {
+        layout.classList.add('mobile-show-cart');
+        if (btnCart) btnCart.classList.add('active');
+        if (btnMenu) btnMenu.classList.remove('active');
+    } else {
+        layout.classList.remove('mobile-show-cart');
+        if (btnMenu) btnMenu.classList.add('active');
+        if (btnCart) btnCart.classList.remove('active');
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 // Payment Method Selector
@@ -921,6 +976,7 @@ async function submitOrder(actionType) {
                 document.getElementById('cart-table-select').value = '';
                 renderCart();
                 refreshActiveOrders();
+                if (window.innerWidth <= 991) mobileSwitchPosTab('menu');
                 
                 // Refresh table status list
                 allTables = await apiCall('/api/tables');
@@ -939,6 +995,7 @@ async function submitOrder(actionType) {
             document.getElementById('cart-table-select').value = '';
             renderCart();
             refreshActiveOrders();
+            if (window.innerWidth <= 991) mobileSwitchPosTab('menu');
             
             allTables = await apiCall('/api/tables');
             renderTableSelector();
@@ -1017,6 +1074,7 @@ async function loadOrderToPOS(orderId) {
             notes: oi.notes || ''
         }));
         renderCart();
+        if (window.innerWidth <= 991) mobileSwitchPosTab('cart');
         showToast(`Đã nạp đơn #HD${String(order.id).padStart(5, '0')} vào quầy POS!`, 'info');
     } catch (e) {
         showToast('Lỗi khi nạp đơn!', 'error');
